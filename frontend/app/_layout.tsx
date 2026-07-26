@@ -1,10 +1,16 @@
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { LogBox } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider } from "react-native-keyboard-controller";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { AuthProvider } from "@/src/auth-context";
+import { ToastProvider } from "@/src/components/toast";
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
-
+import { colors } from "@/src/theme";
 
 // Disable logbox errors etc so that users can see the app
 // and agent works as expected.
@@ -29,5 +35,25 @@ export default function RootLayout() {
   // the app — icons will tofu, but the app still boots.
   if (!loaded && !error) return null;
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.surface }}>
+      <KeyboardProvider>
+        <SafeAreaProvider>
+          <AuthProvider>
+            <ToastProvider>
+              <StatusBar style="dark" />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: colors.surface },
+                }}
+              >
+                <Stack.Screen name="paywall" options={{ presentation: "modal" }} />
+              </Stack>
+            </ToastProvider>
+          </AuthProvider>
+        </SafeAreaProvider>
+      </KeyboardProvider>
+    </GestureHandlerRootView>
+  );
 }

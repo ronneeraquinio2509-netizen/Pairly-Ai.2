@@ -1,58 +1,603 @@
-from fastapi import FastAPI, APIRouter
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-import os
+import json
 import logging
+import os
+import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from pydantic import BaseModel, Field
-from typing import List
-import uuid
-from datetime import datetime
+from typing import Annotated, Any, List, Optional
 
+import bcrypt
+import jwt
+import requests
+from bson import ObjectId
+from dotenv import load_dotenv
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from motor.motor_asyncio import AsyncIOMotorClient
+from pydantic import BaseModel, BeforeValidator, EmailStr, Field
+from starlette.middleware.cors import CORSMiddleware
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / ".env")
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("pairly")
+
+mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[os.environ["DB_NAME"]]
 
-# Create the main app without a prefix
-app = FastAPI()
+JWT_SECRET = os.environ["JWT_SECRET"]
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRE_DAYS = 30
+FREE_DAILY_LIMIT = int(os.environ.get("FREE_DAILY_LIMIT", "5"))
+EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
 
-# Create a router with the /api prefix
+PAYPAL_CLIENT_ID = os.environ.get("PAYPAL_CLIENT_ID", "")
+PAYPAL_SECRET = os.environ.get("PAYPAL_SECRET", "")
+PAYPAL_BASE = os.environ.get("PAYPAL_BASE_URL", "https://api-m.sandbox.paypal.com")
+PREMIUM_PRICE = os.environ.get("PREMIUM_PRICE", "9.99")
+
+app = FastAPI(title="Pairly AI")
 api_router = APIRouter(prefix="/api")
+security = HTTPBearer(auto_error=False)
 
 
-# Define Models
-class StatusCheck(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+# ---------------------------------------------------------------- Mongo base
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
 
-# Add your routes to the router instead of directly to app
+def _to_str(v: Any) -> Any:
+    return str(v) if isinstance(v, ObjectId) else v
+
+
+PyObjectId = Annotated[str, BeforeValidator(_to_str)]
+
+
+class BaseDocument(BaseModel):
+    id: Optional[PyObjectId] = Field(default=None, alias="_id")
+
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
+
+    def to_mongo(self) -> dict:
+        data = self.model_dump(by_alias=True, exclude_none=True)
+        data.pop("_id", None)
+        return data
+
+    @classmethod
+    def from_mongo(cls, doc: Optional[dict]):
+        if not doc:
+            return None
+        return cls.model_validate(doc)
+
+
+# ---------------------------------------------------------------- Models
+
+
+class Preferences(BaseModel):
+    diet: str = "none"
+    cuisines: List[str] = []
+    spice: str = "medium"
+    avoid: str = ""
+
+
+class UserDoc(BaseDocument):
+    email: str
+    name: str
+    role: str = "home_cook"
+    password_hash: str
+    preferences: Preferences = Preferences()
+    is_premium: bool = False
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class PairingItem(BaseModel):
+    name: str
+    category: str = ""
+    why: str = ""
+    tip: str = ""
+
+
+class PairingDoc(BaseDocument):
+    user_id: PyObjectId
+    query: str
+    category: str
+    context: str = ""
+    role: str = "home_cook"
+    headline: str = ""
+    summary: str = ""
+    pairings: List[PairingItem] = []
+    mini_recipe_title: str = ""
+    mini_recipe_steps: List[str] = []
+    is_favorite: bool = False
+    model_used: str = ""
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class MenuCourse(BaseModel):
+    course: str
+    dish: str
+    pairing: str = ""
+    notes: str = ""
+
+
+class MenuDoc(BaseDocument):
+    user_id: PyObjectId
+    title: str
+    occasion: str = ""
+    items: List[str] = []
+    courses: List[MenuCourse] = []
+    wine_notes: str = ""
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+# ---------------------------------------------------------------- Requests
+
+
+class SignupReq(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=6)
+    name: str = Field(min_length=1)
+    role: str = "home_cook"
+
+
+class LoginReq(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class ProfileReq(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    preferences: Optional[Preferences] = None
+
+
+class PairingReq(BaseModel):
+    query: str = Field(min_length=1)
+    category: str = "ingredient"
+    context: str = ""
+
+
+class MenuReq(BaseModel):
+    occasion: str = ""
+    items: List[str] = []
+    notes: str = ""
+
+
+class CaptureReq(BaseModel):
+    order_id: str
+
+
+# ---------------------------------------------------------------- Auth utils
+
+
+def hash_password(pw: str) -> str:
+    return bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(pw: str, hashed: str) -> bool:
+    try:
+        return bcrypt.checkpw(pw.encode("utf-8"), hashed.encode("utf-8"))
+    except ValueError:
+        return False
+
+
+def create_token(user_id: str) -> str:
+    payload = {
+        "sub": user_id,
+        "exp": datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRE_DAYS),
+        "iat": datetime.now(timezone.utc),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+async def current_user(
+    creds: Optional[HTTPAuthorizationCredentials] = Depends(security),
+) -> UserDoc:
+    if creds is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    try:
+        payload = jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+    doc = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return UserDoc.from_mongo(doc)
+
+
+def public_user(u: UserDoc) -> dict:
+    return {
+        "id": u.id,
+        "email": u.email,
+        "name": u.name,
+        "role": u.role,
+        "preferences": u.preferences.model_dump(),
+        "is_premium": u.is_premium,
+    }
+
+
+# ---------------------------------------------------------------- AI engine
+
+SCHEMA_HINT = """Respond with ONLY valid minified JSON, no markdown fences, matching:
+{"headline":"short editorial title","summary":"1-2 sentence overview","pairings":[{"name":"...","category":"ingredient|dish|beverage|sauce|side","why":"1-2 sentences on why it works flavour-wise","tip":"one short serving tip"}],"mini_recipe_title":"...","mini_recipe_steps":["step 1","step 2","step 3","step 4"]}
+Return exactly 5 pairings and 3-5 recipe steps."""
+
+
+def build_system_message(role: str, prefs: Preferences) -> str:
+    if role == "chef":
+        tone = (
+            "You are Pairly, a culinary R&D consultant advising a professional chef. "
+            "Use precise technical language (acidity, fat, Maillard, umami, texture contrast), "
+            "reference modern plating and menu logic, and suggest non-obvious combinations."
+        )
+    else:
+        tone = (
+            "You are Pairly, a warm and practical kitchen companion for a home cook. "
+            "Use plain, encouraging language, common supermarket ingredients and simple techniques."
+        )
+    p = f"Diet: {prefs.diet}. Preferred cuisines: {', '.join(prefs.cuisines) or 'any'}. Spice level: {prefs.spice}. Avoid: {prefs.avoid or 'nothing'}."
+    return f"{tone}\nRespect these user preferences strictly: {p}\n{SCHEMA_HINT}"
+
+
+def extract_json(text: str) -> dict:
+    text = text.strip()
+    text = re.sub(r"^```(?:json)?", "", text).strip()
+    text = re.sub(r"```$", "", text).strip()
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end == -1:
+        raise ValueError("no json in response")
+    return json.loads(text[start : end + 1])
+
+
+async def run_llm(system_message: str, prompt: str, session_id: str) -> tuple[dict, str]:
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+    attempts = [("anthropic", "claude-sonnet-4-6"), ("openai", "gpt-5.5")]
+    last_err: Optional[Exception] = None
+    for provider, model in attempts:
+        try:
+            chat = LlmChat(
+                api_key=EMERGENT_LLM_KEY,
+                session_id=f"{session_id}-{provider}",
+                system_message=system_message,
+            ).with_model(provider, model)
+            raw = await chat.send_message(UserMessage(text=prompt))
+            return extract_json(raw if isinstance(raw, str) else str(raw)), model
+        except Exception as e:  # noqa: BLE001 - fall back to next model
+            last_err = e
+            logger.warning("LLM %s/%s failed: %s", provider, model, e)
+    raise HTTPException(status_code=503, detail=f"AI service unavailable: {last_err}")
+
+
+# ---------------------------------------------------------------- Usage
+
+
+def today_key() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+async def used_today(user_id: str) -> int:
+    return await db.pairings.count_documents(
+        {"user_id": user_id, "created_at": {"$regex": f"^{today_key()}"}}
+    )
+
+
+# ---------------------------------------------------------------- Routes
+
+
 @api_router.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "Pairly AI API"}
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.dict()
-    status_obj = StatusCheck(**status_dict)
-    _ = await db.status_checks.insert_one(status_obj.dict())
-    return status_obj
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    status_checks = await db.status_checks.find().to_list(1000)
-    return [StatusCheck(**status_check) for status_check in status_checks]
+@api_router.post("/auth/signup")
+async def signup(body: SignupReq):
+    email = body.email.lower().strip()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(status_code=400, detail="An account with this email already exists")
+    user = UserDoc(
+        email=email,
+        name=body.name.strip(),
+        role=body.role if body.role in ("home_cook", "chef") else "home_cook",
+        password_hash=hash_password(body.password),
+    )
+    res = await db.users.insert_one(user.to_mongo())
+    user.id = str(res.inserted_id)
+    return {"token": create_token(user.id), "user": public_user(user)}
 
-# Include the router in the main app
+
+@api_router.post("/auth/login")
+async def login(body: LoginReq):
+    doc = await db.users.find_one({"email": body.email.lower().strip()})
+    if not doc or not verify_password(body.password, doc.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+    user = UserDoc.from_mongo(doc)
+    return {"token": create_token(user.id), "user": public_user(user)}
+
+
+@api_router.get("/auth/me")
+async def me(user: UserDoc = Depends(current_user)):
+    return public_user(user)
+
+
+@api_router.put("/profile")
+async def update_profile(body: ProfileReq, user: UserDoc = Depends(current_user)):
+    updates: dict = {}
+    if body.name:
+        updates["name"] = body.name.strip()
+    if body.role in ("home_cook", "chef"):
+        updates["role"] = body.role
+    if body.preferences is not None:
+        updates["preferences"] = body.preferences.model_dump()
+    if updates:
+        await db.users.update_one({"_id": ObjectId(user.id)}, {"$set": updates})
+    doc = await db.users.find_one({"_id": ObjectId(user.id)})
+    return public_user(UserDoc.from_mongo(doc))
+
+
+@api_router.get("/usage")
+async def usage(user: UserDoc = Depends(current_user)):
+    used = await used_today(user.id)
+    return {
+        "used_today": used,
+        "limit": FREE_DAILY_LIMIT,
+        "remaining": max(0, FREE_DAILY_LIMIT - used) if not user.is_premium else None,
+        "is_premium": user.is_premium,
+    }
+
+
+@api_router.post("/pairings")
+async def create_pairing(body: PairingReq, user: UserDoc = Depends(current_user)):
+    if not user.is_premium:
+        used = await used_today(user.id)
+        if used >= FREE_DAILY_LIMIT:
+            raise HTTPException(
+                status_code=402,
+                detail=f"Daily free limit of {FREE_DAILY_LIMIT} pairings reached. Upgrade to Pairly Pro for unlimited pairings.",
+            )
+
+    cat = body.category if body.category in ("ingredient", "dish", "beverage") else "ingredient"
+    label = {"ingredient": "ingredient", "dish": "dish", "beverage": "drink"}[cat]
+    prompt = (
+        f'The user is working with this {label}: "{body.query.strip()}".\n'
+        + (f'Additional context about what they are making: "{body.context.strip()}".\n' if body.context.strip() else "")
+        + f"Suggest the 5 best {cat} pairings, each with a flavour reason and a serving tip, "
+        "plus one mini recipe / serving idea that uses the best pairing."
+    )
+    data, model_used = await run_llm(
+        build_system_message(user.role, user.preferences), prompt, f"pairing-{user.id}"
+    )
+
+    pairing = PairingDoc(
+        user_id=user.id,
+        query=body.query.strip(),
+        category=cat,
+        context=body.context.strip(),
+        role=user.role,
+        headline=str(data.get("headline", body.query.strip()))[:160],
+        summary=str(data.get("summary", "")),
+        pairings=[
+            PairingItem(
+                name=str(p.get("name", "")),
+                category=str(p.get("category", cat)),
+                why=str(p.get("why", "")),
+                tip=str(p.get("tip", "")),
+            )
+            for p in (data.get("pairings") or [])
+            if isinstance(p, dict)
+        ],
+        mini_recipe_title=str(data.get("mini_recipe_title", "")),
+        mini_recipe_steps=[str(s) for s in (data.get("mini_recipe_steps") or [])],
+        model_used=model_used,
+    )
+    res = await db.pairings.insert_one(pairing.to_mongo())
+    pairing.id = str(res.inserted_id)
+    return pairing.model_dump()
+
+
+@api_router.get("/pairings")
+async def list_pairings(
+    favorites_only: bool = False, limit: int = 50, user: UserDoc = Depends(current_user)
+):
+    q: dict = {"user_id": user.id}
+    if favorites_only:
+        q["is_favorite"] = True
+    docs = await db.pairings.find(q).sort("created_at", -1).to_list(limit)
+    return [PairingDoc.from_mongo(d).model_dump() for d in docs]
+
+
+@api_router.get("/pairings/{pairing_id}")
+async def get_pairing(pairing_id: str, user: UserDoc = Depends(current_user)):
+    if not ObjectId.is_valid(pairing_id):
+        raise HTTPException(status_code=404, detail="Pairing not found")
+    doc = await db.pairings.find_one({"_id": ObjectId(pairing_id), "user_id": user.id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Pairing not found")
+    return PairingDoc.from_mongo(doc).model_dump()
+
+
+@api_router.post("/pairings/{pairing_id}/favorite")
+async def toggle_favorite(pairing_id: str, user: UserDoc = Depends(current_user)):
+    if not ObjectId.is_valid(pairing_id):
+        raise HTTPException(status_code=404, detail="Pairing not found")
+    doc = await db.pairings.find_one({"_id": ObjectId(pairing_id), "user_id": user.id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Pairing not found")
+    new_val = not doc.get("is_favorite", False)
+    await db.pairings.update_one({"_id": ObjectId(pairing_id)}, {"$set": {"is_favorite": new_val}})
+    return {"id": pairing_id, "is_favorite": new_val}
+
+
+@api_router.delete("/pairings/{pairing_id}")
+async def delete_pairing(pairing_id: str, user: UserDoc = Depends(current_user)):
+    if not ObjectId.is_valid(pairing_id):
+        raise HTTPException(status_code=404, detail="Pairing not found")
+    res = await db.pairings.delete_one({"_id": ObjectId(pairing_id), "user_id": user.id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Pairing not found")
+    return {"deleted": True}
+
+
+MENU_SCHEMA = """Respond with ONLY valid minified JSON, no markdown fences, matching:
+{"title":"menu name","courses":[{"course":"Amuse / Starter / Main / Dessert","dish":"dish name","pairing":"beverage or side pairing","notes":"one line technique or plating note"}],"wine_notes":"2 sentences on the overall beverage progression"}
+Return 4 to 5 courses."""
+
+
+@api_router.post("/menus")
+async def create_menu(body: MenuReq, user: UserDoc = Depends(current_user)):
+    if not user.is_premium:
+        used = await used_today(user.id)
+        if used >= FREE_DAILY_LIMIT:
+            raise HTTPException(
+                status_code=402,
+                detail=f"Daily free limit of {FREE_DAILY_LIMIT} AI requests reached. Upgrade to Pairly Pro.",
+            )
+    items = [i.strip() for i in body.items if i.strip()]
+    if not items:
+        raise HTTPException(status_code=400, detail="Add at least one hero ingredient")
+    system = (
+        "You are Pairly, a culinary R&D consultant building tasting menus for professional kitchens. "
+        "Be precise about technique, seasonality, acid/fat balance and course progression.\n" + MENU_SCHEMA
+    )
+    prompt = (
+        f"Build a coherent tasting menu for this occasion: {body.occasion or 'a modern tasting menu'}.\n"
+        f"Hero ingredients available: {', '.join(items)}.\n"
+        + (f"Chef notes / constraints: {body.notes}\n" if body.notes.strip() else "")
+        + "Each course must have a beverage or side pairing."
+    )
+    data, _ = await run_llm(system, prompt, f"menu-{user.id}")
+    menu = MenuDoc(
+        user_id=user.id,
+        title=str(data.get("title", "Tasting Menu"))[:160],
+        occasion=body.occasion,
+        items=items,
+        courses=[
+            MenuCourse(
+                course=str(c.get("course", "")),
+                dish=str(c.get("dish", "")),
+                pairing=str(c.get("pairing", "")),
+                notes=str(c.get("notes", "")),
+            )
+            for c in (data.get("courses") or [])
+            if isinstance(c, dict)
+        ],
+        wine_notes=str(data.get("wine_notes", "")),
+    )
+    res = await db.menus.insert_one(menu.to_mongo())
+    menu.id = str(res.inserted_id)
+    return menu.model_dump()
+
+
+@api_router.get("/menus")
+async def list_menus(user: UserDoc = Depends(current_user)):
+    docs = await db.menus.find({"user_id": user.id}).sort("created_at", -1).to_list(50)
+    return [MenuDoc.from_mongo(d).model_dump() for d in docs]
+
+
+@api_router.delete("/menus/{menu_id}")
+async def delete_menu(menu_id: str, user: UserDoc = Depends(current_user)):
+    if not ObjectId.is_valid(menu_id):
+        raise HTTPException(status_code=404, detail="Menu not found")
+    res = await db.menus.delete_one({"_id": ObjectId(menu_id), "user_id": user.id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Menu not found")
+    return {"deleted": True}
+
+
+# ---------------------------------------------------------------- PayPal
+
+PAYPAL_CONFIGURED = bool(PAYPAL_CLIENT_ID and PAYPAL_SECRET)
+
+
+def paypal_token() -> str:
+    r = requests.post(
+        f"{PAYPAL_BASE}/v1/oauth2/token",
+        auth=(PAYPAL_CLIENT_ID, PAYPAL_SECRET),
+        data={"grant_type": "client_credentials"},
+        timeout=20,
+    )
+    r.raise_for_status()
+    return r.json()["access_token"]
+
+
+@api_router.post("/paypal/order")
+async def paypal_order(user: UserDoc = Depends(current_user)):
+    if not PAYPAL_CONFIGURED:
+        # MOCKED checkout until PayPal credentials are provided.
+        return {"order_id": f"MOCK-{user.id}", "approve_url": None, "mocked": True, "price": PREMIUM_PRICE}
+    try:
+        token = paypal_token()
+        r = requests.post(
+            f"{PAYPAL_BASE}/v2/checkout/orders",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={
+                "intent": "CAPTURE",
+                "purchase_units": [
+                    {
+                        "reference_id": user.id,
+                        "description": "Pairly Pro lifetime unlock",
+                        "amount": {"currency_code": "USD", "value": PREMIUM_PRICE},
+                    }
+                ],
+                "application_context": {
+                    "brand_name": "Pairly AI",
+                    "user_action": "PAY_NOW",
+                    "return_url": "pairly://paypal-return",
+                    "cancel_url": "pairly://paypal-cancel",
+                },
+            },
+            timeout=25,
+        )
+        r.raise_for_status()
+        data = r.json()
+        approve = next((l["href"] for l in data.get("links", []) if l.get("rel") == "payer-action" or l.get("rel") == "approve"), None)
+        return {"order_id": data["id"], "approve_url": approve, "mocked": False, "price": PREMIUM_PRICE}
+    except requests.RequestException as e:
+        logger.error("PayPal order failed: %s", e)
+        raise HTTPException(status_code=502, detail="Could not start PayPal checkout")
+
+
+@api_router.post("/paypal/capture")
+async def paypal_capture(body: CaptureReq, user: UserDoc = Depends(current_user)):
+    if not PAYPAL_CONFIGURED:
+        await db.users.update_one({"_id": ObjectId(user.id)}, {"$set": {"is_premium": True}})
+        await db.payments.insert_one(
+            {
+                "user_id": user.id,
+                "order_id": body.order_id,
+                "amount": PREMIUM_PRICE,
+                "status": "COMPLETED_MOCK",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        return {"is_premium": True, "mocked": True}
+    try:
+        token = paypal_token()
+        r = requests.post(
+            f"{PAYPAL_BASE}/v2/checkout/orders/{body.order_id}/capture",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            timeout=25,
+        )
+        r.raise_for_status()
+        data = r.json()
+    except requests.RequestException as e:
+        logger.error("PayPal capture failed: %s", e)
+        raise HTTPException(status_code=502, detail="Could not confirm the PayPal payment")
+    if data.get("status") != "COMPLETED":
+        raise HTTPException(status_code=400, detail=f"Payment not completed (status: {data.get('status')})")
+    await db.users.update_one({"_id": ObjectId(user.id)}, {"$set": {"is_premium": True}})
+    await db.payments.insert_one(
+        {
+            "user_id": user.id,
+            "order_id": body.order_id,
+            "amount": PREMIUM_PRICE,
+            "status": "COMPLETED",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    return {"is_premium": True, "mocked": False}
+
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -63,12 +608,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+
+@app.on_event("startup")
+async def startup():
+    await db.users.create_index("email", unique=True)
+    await db.pairings.create_index([("user_id", 1), ("created_at", -1)])
+    logger.info("Pairly AI API ready. PayPal configured: %s", PAYPAL_CONFIGURED)
+
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

@@ -1,0 +1,184 @@
+{
+  "app_name": "Pairly AI",
+  "personality": "3 Editorial Mobile LIGHT",
+  "personality_one_liner": "A culinary magazine brought to life with elegant serif headers and highly readable sans-serif body text, prioritizing ingredient focus and fast hands-free interactions.",
+  "color": {
+    "surface": "#FAF9F6",
+    "onSurface": "#1F1E1D",
+    "surfaceSecondary": "#FFFFFF",
+    "onSurfaceSecondary": "#1F1E1D",
+    "surfaceTertiary": "#F0EFEA",
+    "onSurfaceTertiary": "#1F1E1D",
+    "surfaceInverse": "#1F1E1D",
+    "onSurfaceInverse": "#FAF9F6",
+    "brand": "#C85A46",
+    "brandPrimary": "#C85A46",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#D47766",
+    "onBrandSecondary": "#FFFFFF",
+    "brandTertiary": "#F4EAE8",
+    "onBrandTertiary": "#C85A46",
+    "success": "#4D7C5D",
+    "onSuccess": "#FFFFFF",
+    "warning": "#D49D42",
+    "onWarning": "#FFFFFF",
+    "error": "#B84B4B",
+    "onError": "#FFFFFF",
+    "info": "#606C71",
+    "onInfo": "#FFFFFF",
+    "border": "#E8E6E1",
+    "borderStrong": "#D1CEC7",
+    "divider": "#E8E6E1"
+  },
+  "typography": {
+    "displayFontFamily": "Lora",
+    "textFontFamily": "Plus Jakarta Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Magazine-like spacing with generous vertical breathing room. Minimal side padding for full-bleed hero images, generous padding for text. Keep UI chrome quiet.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "0",
+  "navigation": "bottom_tabs",
+  "icon_set": "Feather",
+  "glassmorphism": {
+    "enabled": "false",
+    "do's": [],
+    "dont's": [
+      "Editorial personality relies on clean lines, whitespace, and solid surfaces. Avoid glassmorphism to maintain the high-end print magazine feel."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Auth / Role Select",
+      "purpose": "Seamless entry point where users login and select their culinary persona (Home Cook or Chef).",
+      "states": {
+        "loading": "Centered minimalist spinner with 'Preparing your kitchen...' text.",
+        "empty": "N/A",
+        "error": "Clean inline error message above the submit button."
+      },
+      "layout": "Full-bleed background image with a gradient scrim. Large Lora heading. Large tappable role cards for 'Home Cook' vs 'Chef' using brandTertiary backgrounds when selected. Bottom sticky login CTA."
+    },
+    {
+      "name": "Home / Search",
+      "purpose": "Fast, input-first screen to enter ingredients or dishes and request pairings.",
+      "states": {
+        "loading": "Shimmering skeletons for recent searches and category chips.",
+        "empty": "Illustration/Photo of ingredients with prompt 'What are you cooking today?'.",
+        "error": "Error toast using surfaceInverse for high contrast."
+      },
+      "layout": "Large editorial typography for the search prompt. Oversized, borderless text input. Horizontal scrolling chips for 'Ingredient', 'Dish', 'Beverage' filters. A prominent sticky CTA 'Find Pairing' anchored at the bottom."
+    },
+    {
+      "name": "Pairing Results",
+      "purpose": "Displays AI-generated pairing recommendations, explanations, and mini-recipes.",
+      "states": {
+        "loading": "Skeleton cards mimicking the layout of pairing results with a subtle pulsing animation.",
+        "empty": "Empty state illustration with text 'No pairings found for this combination. Try another ingredient!'",
+        "error": "Retry button centered on screen with 'We couldn't fetch pairings right now.' text."
+      },
+      "layout": "Editorial magazine layout: large Lora title for the queried item. Pairing results presented as clean, full-width cards with a subtle divider instead of shadows. Each card includes a badge (brandTertiary), reasoning text (Plus Jakarta Sans), and an expandable mini-recipe section. WhatsApp share button as a subtle icon action."
+    },
+    {
+      "name": "Saved Favorites",
+      "purpose": "Archive of the user's best pairings and discovered combinations.",
+      "states": {
+        "loading": "Standard list skeletons.",
+        "empty": "Empty state photo (wine & cheese) with 'Your culinary archive is empty. Start saving your favorite pairings.'",
+        "error": "Standard retry state."
+      },
+      "layout": "Simple list layout with generous vertical spacing (xl) between items. Leading visual (initials or category icon), title in Lora, and short description in Sans-serif. 'View Recipe' secondary button."
+    },
+    {
+      "name": "Chef Mode Menu Builder",
+      "purpose": "Batch pairing and menu generation tool specifically styled for professionals.",
+      "states": {
+        "loading": "Spinner with 'Generating professional menu pairings...' text.",
+        "empty": "Professional chef plating photo with 'Start building your next menu.'",
+        "error": "Retry state."
+      },
+      "layout": "Denser, utility-infused editorial layout. Section headers for Course 1, Course 2, etc. Inline inputs for quick ingredient addition. Use surfaceTertiary blocks for grouped items to maintain structure without relying on borders."
+    },
+    {
+      "name": "Premium Paywall",
+      "purpose": "Upsell screen when the user hits the 5 pairings/day limit.",
+      "states": {
+        "loading": "Spinner during PayPal transaction.",
+        "empty": "N/A",
+        "error": "Transaction failed error message."
+      },
+      "layout": "Cinematic full-bleed image background (wine/cheese or chef plating) with a heavy gradient-to-dark scrim. 'Unlock Limitless Pairings' Lora headline. A bulleted list of pro features. Large sticky brandPrimary CTA at the bottom for PayPal."
+    }
+  ],
+  "images": {
+    "texture_bg": {
+      "url": "https://images.unsplash.com/photo-1604147706283-d7119b5b822c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1NzZ8MHwxfHNlYXJjaHwxfHx3aGl0ZSUyMHBhcGVyJTIwdGV4dHVyZXxlbnwwfHx8fDE3ODUxMDI4NjJ8MA&ixlib=rb-4.1.0&q=85",
+      "dark": "https://images.unsplash.com/photo-1578662996442-48f60103fc96?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2ODl8MHwxfHNlYXJjaHwxfHxkYXJrJTIwY2hhcmNvYWwlMjBwYXBlciUyMHRleHR1cmV8ZW58MHx8fHwxNzg1MTAyODYzfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Textured paper background for warm organic feel"
+    },
+    "empty_state_food": {
+      "url": "https://images.unsplash.com/photo-1690983322070-22861e13ce47?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NDh8MHwxfHNlYXJjaHwxfHxmcmVzaCUyMGluZ3JlZGllbnRzJTIwY29va2luZyUyMHRvcCUyMHZpZXd8ZW58MHx8fHwxNzg1MTAyODU3fDA&ixlib=rb-4.1.0&q=85",
+      "dark": "https://images.unsplash.com/photo-1690983322070-22861e13ce47?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NDh8MHwxfHNlYXJjaHwxfHxmcmVzaCUyMGluZ3JlZGllbnRzJTIwY29va2luZyUyMHRvcCUyMHZpZXd8ZW58MHx8fHwxNzg1MTAyODU3fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Fresh ingredients on a cutting board top view"
+    },
+    "chef_mode_banner": {
+      "url": "https://images.unsplash.com/photo-1572715376701-98568319fd0b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNDR8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBjaGVmJTIwcGxhdGluZyUyMHVwc2NhbGUlMjBmb29kfGVufDB8fHx8MTc4NTEwMjg1N3ww&ixlib=rb-4.1.0&q=85",
+      "dark": "https://images.unsplash.com/photo-1572715376701-98568319fd0b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNDR8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBjaGVmJTIwcGxhdGluZyUyMHVwc2NhbGUlMjBmb29kfGVufDB8fHx8MTc4NTEwMjg1N3ww&ixlib=rb-4.1.0&q=85",
+      "alt": "Professional chef plating upscale food"
+    },
+    "pairing_wine_cheese": {
+      "url": "https://images.unsplash.com/photo-1551790629-9d5c2d781d8b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwxfHx3aW5lJTIwYW5kJTIwY2hlZXNlJTIwcGFpcmluZyUyMHRvcCUyMGRvd258ZW58MHx8fHwxNzg1MTAyODU3fDA&ixlib=rb-4.1.0&q=85",
+      "dark": "https://images.unsplash.com/photo-1551790629-9d5c2d781d8b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwxfHx3aW5lJTIwYW5kJTIwY2hlZXNlJTIwcGFpcmluZyUyMHRvcCUyMGRvd258ZW58MHx8fHwxNzg1MTAyODU3fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Wine and cheese pairing top down"
+    }
+  },
+  "haptics": {
+    "events": {
+      "onPrimaryAction": "impactMedium",
+      "onTabPress": "impactLight",
+      "onToggle": "selection",
+      "onSuccess": "notificationSuccess",
+      "onError": "notificationError"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Use Editorial structure: Lora for headings (dish names, pairing recommendations) to evoke a premium cookbook feel, and Plus Jakarta Sans for UI elements, labels, and explanations to ensure clarity.",
+    "Do not use Indigo, Violet, or Blues anywhere in the app. Strict ban. Stick to the terracotta, sand, and charcoal palette to represent food and warmth.",
+    "Implement the MANDATORY gradient-to-dark scrim pattern whenever text is placed on top of images (e.g., hero banners on the Paywall or Auth screens). Ensure the bottom stop opacity is at least 70% surfaceInverse.",
+    "The AI Search input screen should feel fast and distraction-free. Avoid dense dashboards; utilize heavy whitespace and generous vertical padding (xl, 2xl).",
+    "Ensure every screen implements the specified Loading, Empty, and Error states. Empty states should utilize the provided high-quality food photography, not just generic icons.",
+    "Keep the primary CTAs (e.g., 'Find Pairing', 'Unlock Premium') sticky at the bottom with safe-area padding so the user doesn't have to scroll to act.",
+    "Use 'Feather' icons exclusively, ensuring consistent weight. Tinted icon containers (using brandTertiary) are preferred over floating bare icons."
+  ]
+}

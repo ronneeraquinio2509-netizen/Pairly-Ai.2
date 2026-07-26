@@ -40,8 +40,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {state ? (
         <Animated.View
           testID="app-toast"
-          pointerEvents="none"
-          style={[styles.wrap, { top: insets.top + spacing.sm, opacity }]}
+          style={[styles.wrap, { top: insets.top + spacing.sm, opacity, pointerEvents: "none" }]}
         >
           <Feather name={icon} size={16} color={colors.onSurfaceInverse} />
           <Text style={styles.text} numberOfLines={3}>

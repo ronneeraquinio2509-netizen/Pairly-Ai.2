@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 5 (backend only) — re-tested the recipe-generator quota bug from iteration 4. The fix in /app/backend/server.py:480-489 (used_today() now aggregates db.ai_recipes for the current day alongside pairings + menus + chat_messages) is CORRECT and verified. New file /app/backend/tests/test_pairly_iter5_quota.py has 9 tests, ALL PASSING (9/9): (1) /api/usage returns proper {used_today, limit, remaining, is_premium} shape for a fresh free user; (2) POST /api/pairings still returns 200 and hydrated response with iter4 extended fields (flavor_profile/nutrition_notes/alternatives per item) and used_today ticks to 1; (3) GET /api/feed returns hydrated posts with author card + like_count/comment_count; (4) 5 seeded ai_recipes docs → /api/usage.used_today == 5, remaining == 0 (proves aggregation); (5) 5 seeded chat_messages today → POST /api/recipes/generate returns 402; (6) 5 seeded chat_messages today → POST /api/pairings returns 402; (7) mixed 2 chat + 2 pairings + 1 ai_recipe = 5 → both endpoints return 402; (8) premium user (is_premium=True) with 5 chats today still gets 200 on POST /api/pairings (unlimited); (9) real LLM POST /api/recipes/generate (~24s) increments used_today by exactly 1. Also re-ran the iteration 4 TestRecipeGenerator class — both tests including the previously-red test_generate_recipe_ok (which asserts used_today >= 1 after recipe generation) now PASS. Bug is confirmed fixed. No new backend issues found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "PairingDetail off-screen share-card wrapper", "issue": "Deprecation warning still emitted (carried since iter2, not tested this run): `props.pointerEvents is deprecated. Use style.pointerEvents`. Reference: /app/frontend/app/pairing/[id].tsx"}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_pairly_iter5_quota.py",
+    "/app/backend/tests/test_pairly_iter4_social.py",
+    "/app/test_reports/pytest/iter5_quota.xml"
+  ],
+  "action_items": [
+    "None for the quota bug — the fix is verified. Main agent can safely close the iteration-4 HIGH-priority item on POST /api/recipes/generate quota counting.",
+    "(Carried, still open) Refactor: server.py is now ~1529 lines. Consider splitting into modules (auth, ai, social, search, chat, paypal). used_today() should ideally read from a single 'ai_events' collection or a central list to prevent regressions when future AI endpoints are added.",
+    "(Carried, still open) Cosmetic: migrate off-screen wrapper in /app/frontend/app/pairing/[id].tsx from `pointerEvents='none'` prop to `style={{ pointerEvents: 'none' }}`.",
+    "(Optional) Register the `slow` pytest marker in pytest.ini or via @pytest.mark to silence PytestUnknownMarkWarning."
+  ],
+  "critical_code_review_comments": [
+    "used_today() at server.py:480-489 now correctly counts db.ai_recipes for the current day — matches the spec (pairing + menu + chat_message + generated recipe all count toward the 5/day cap).",
+    "The hard-coded list of quota-consuming collections is still a regression hazard: any new AI endpoint that writes to a new collection will silently be free unless a maintainer remembers to update used_today(). A central 'ai_events' collection or a decorator stamping ai_event=true on every quota-consuming insert would eliminate this class of bug entirely.",
+    "toggle_bookmark still silently falls back to Favorites for unknown collection names (carried from iter4 review, not re-verified this run).",
+    "Frontend tab bar items still lack testID props per iter4 note — main agent said tabBarButtonTestID values tab-home/tab-search/tab-create/tab-ai/tab-profile were added, but this was backend-only testing so not verified."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_pairly_iter5_quota.py (new — 9 focused tests for quota aggregation + regression)"
+  ],
+  "success_rate": {"backend": "100% (9/9 new iter5 tests + iter4 TestRecipeGenerator 2/2 re-verified)", "frontend": "not tested this iteration (backend-only per review_request)"},
+  "seed_data_creation": "All test users prefixed TEST_iter5_* and torn down in finally blocks (chat_messages, pairings, menus, ai_recipes, users all cleaned). No lingering test data expected; chef@pairly.app and cook@pairly.app were not touched this iteration.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 4's recipe-generator quota bug is now fully fixed and covered by /app/backend/tests/test_pairly_iter5_quota.py (9 tests). Future iterations that add new AI endpoints (writing to new mongo collections) MUST also add that collection to used_today() in server.py:480 or the free-tier cap will not apply — recommend main agent implement the 'ai_events' central collection refactor before adding more AI features. cook@pairly.app still carries the TEST_* bio/location/favorite_cuisine/avatar_b64 values from iter4.",
+  "rca_of_issue": "Not applicable this iteration — the iter4 quota bug is fixed. Fix RCA: used_today() at server.py:480 now includes `db.ai_recipes.count_documents({'user_id': user_id, 'created_at': today})` alongside the previously-tracked pairings/menus/chat_messages. Verified end-to-end by (a) direct DB seeding of 5 ai_recipes → /api/usage.used_today == 5 && remaining == 0, and (b) a real LLM call to /api/recipes/generate on a fresh free user increments used_today from 0 to 1."
+}

@@ -478,11 +478,12 @@ def today_key() -> str:
 
 
 async def used_today(user_id: str) -> int:
-    """Every AI request (pairing, menu, chat message) counts toward the free daily cap."""
+    """Every AI request (pairing, menu, generated recipe, chat message) counts toward the free daily cap."""
     today = {"$regex": f"^{today_key()}"}
     counts = await asyncio.gather(
         db.pairings.count_documents({"user_id": user_id, "created_at": today}),
         db.menus.count_documents({"user_id": user_id, "created_at": today}),
+        db.ai_recipes.count_documents({"user_id": user_id, "created_at": today}),
         db.chat_messages.count_documents({"user_id": user_id, "role": "user", "created_at": today}),
     )
     return sum(counts)

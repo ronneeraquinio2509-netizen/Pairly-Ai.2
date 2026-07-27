@@ -21,6 +21,7 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: "Home",
+          tabBarButtonTestID: "tab-home",
           tabBarIcon: ({ color }) => <Feather name="home" size={20} color={color} />,
         }}
       />
@@ -28,6 +29,7 @@ export default function TabsLayout() {
         name="search"
         options={{
           title: "Search",
+          tabBarButtonTestID: "tab-search",
           tabBarIcon: ({ color }) => <Feather name="search" size={20} color={color} />,
         }}
       />
@@ -35,6 +37,7 @@ export default function TabsLayout() {
         name="create"
         options={{
           title: "Create",
+          tabBarButtonTestID: "tab-create",
           tabBarIcon: ({ focused }) => (
             <View style={[styles.createBtn, focused && { backgroundColor: colors.surfaceInverse }]}>
               <Feather name="plus" size={18} color={colors.onBrand} />
@@ -46,6 +49,7 @@ export default function TabsLayout() {
         name="ai"
         options={{
           title: "AI",
+          tabBarButtonTestID: "tab-ai",
           tabBarIcon: ({ color }) => <Feather name="git-merge" size={20} color={color} />,
         }}
       />
@@ -53,6 +57,7 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: "Profile",
+          tabBarButtonTestID: "tab-profile",
           tabBarIcon: ({ color }) => <Feather name="user" size={20} color={color} />,
         }}
       />

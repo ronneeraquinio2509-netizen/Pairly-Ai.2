@@ -51,8 +51,31 @@ free daily limit with PayPal premium unlock, chef menu-building tool.
 - Renamed the product from "Pairly AI" to **Pairly** across app.json, UI, share text and API.
   All verified in `/app/test_reports/iteration_3.json`.
 
-## Backlog
-- **P0** Real PayPal credentials (sandbox → live) + webhook verification for capture.
+## Uploaded master spec (Pairly – Master Emergent Prompt v1.0)
+The user uploaded a full spec turning Pairly into an AI food discovery + social network
+(feed, posts, follows, comments, collections, search, recipe generator, roles, moderation, analytics).
+Delivery is phased. Stack stays FastAPI + MongoDB (spec's Supabase/Postgres/NativeWind is substituted).
+
+### Slice 1 — delivered (2026-06, iterations 4-5)
+- Social: photo + recipe posts (photos as compressed base64), ranked feed (For you / Following),
+  likes, comments + replies, follow/unfollow, in-app activity notifications.
+- AI Recipe Generator: ingredients/cuisine/diet/budget/time/difficulty/calories/goal →
+  full recipe + nutrition + shopping list + drink/dessert pairing, publishable to the feed.
+- Collections: Favorites / Want To Cook / Meal Ideas auto-created + custom collections, post bookmarking.
+- Global search: users / posts / recipes / my pairings with cuisine, difficulty, diet and time filters
+  and latest / most liked / most saved / trending sorting.
+- Expanded profiles: username, bio, location, favourite cuisine, website, avatar + cover photos, counts.
+- Extended pairing output: flavor_profile, nutrition_notes, alternatives per pairing.
+- Navigation restructured to Home / Search / Create / AI hub / Profile.
+- All AI endpoints (pairings, menus, chat, recipe generation) count toward the 5/day free quota.
+
+### Slice 2 — next
+- Google / Apple sign-in (Emergent-managed Google auth), password reset, onboarding + splash screens.
+- Video uploads + object storage (needs the user's AWS keys).
+- Roles & moderation (guest / creator / moderator / admin), reporting, admin analytics.
+- Dark mode (user asked for later).
+
+## Backlog- **P0** Real PayPal credentials (sandbox → live) + webhook verification for capture.
 - **P1** Refine-result action (ask AI to adjust an existing pairing); voice input while cooking.
 - **P1** Ingredient photo upload + vision recognition.
 - **P2** Personalised recommendations from history; pantry-based suggestions; community-shared pairings; multi-language.

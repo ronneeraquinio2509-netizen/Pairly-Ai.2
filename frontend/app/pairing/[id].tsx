@@ -199,7 +199,7 @@ export default function PairingDetail() {
             </Text>
           </Pressable>
 
-          <View style={styles.offscreen} pointerEvents="none">
+          <View style={styles.offscreen}>
             <PairingShareCard ref={cardRef} pairing={pairing} />
           </View>
         </ScrollView>
@@ -337,5 +337,5 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   cardBtnText: { fontFamily: fonts.text, fontSize: type.lg, fontWeight: "600", color: colors.onSurface },
-  offscreen: { position: "absolute", left: -9999, top: 0, opacity: 0 },
+  offscreen: { position: "absolute", left: -9999, top: 0, opacity: 0, pointerEvents: "none" },
 });

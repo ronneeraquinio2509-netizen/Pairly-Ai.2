@@ -33,14 +33,16 @@ free daily limit with PayPal premium unlock, chef menu-building tool.
 - Free tier hard-capped daily; 402 drives the paywall.
 - All screens have loading / empty / error states; sticky CTAs; safe-area aware.
 
-## Implemented (2026-06)
-- JWT signup/login/me, role selection, profile preferences (diet, spice, cuisines, avoid).
+## Implemented (2026-06)- JWT signup/login/me, role selection, profile preferences (diet, spice, cuisines, avoid).
 - AI pairing engine with category filters + recipe context; Claude → GPT fallback; structured JSON.
 - Pairing detail: expandable pairing cards (why + tip), mini recipe card, favorite toggle, WhatsApp share.
 - Search history on Pair tab; Saved tab with category filter chips + pull-to-refresh.
 - Chef menu builder: hero-ingredient tags, occasion, constraints → coursed menu with beverage pairings + share.
 - Usage metering (5/day), paywall screen, PayPal order/capture endpoints (**MOCK mode until keys provided**).
 - Tested: 20 backend pytest cases pass; frontend e2e flow verified (`/app/test_reports/iteration_1.json`).
+- Branded shareable **pairing card image** — off-screen card (`src/components/pairing-share-card.tsx`)
+  captured with `react-native-view-shot` and shared via `expo-sharing` from the pairing detail screen
+  (web shows an info toast; native only). Verified in `/app/test_reports/iteration_2.json`.
 
 ## Backlog
 - **P0** Real PayPal credentials (sandbox → live) + webhook verification for capture.

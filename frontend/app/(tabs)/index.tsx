@@ -1,45 +1,45 @@
 import Feather from "@expo/vector-icons/Feather";
-import { Image } from "expo-image";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ApiError, api, Pairing, Usage } from "@/src/api";
-import { useAuth } from "@/src/auth-context";
+import { Notification, Post, api } from "@/src/api";
 import { useToast } from "@/src/components/toast";
-import { CategoryChips, PrimaryButton, Skeleton } from "@/src/components/ui";
-import { CATEGORIES, categoryImage, colors, fonts, radius, spacing, type } from "@/src/theme";
+import { PostCard } from "@/src/components/post-card";
+import { EmptyState, ErrorState, Skeleton } from "@/src/components/ui";
+import { shareToWhatsApp } from "@/src/share";
+import { colors, fonts, images, radius, spacing, type } from "@/src/theme";
 
-const PLACEHOLDERS: Record<string, string> = {
-  ingredient: "e.g. smoked paprika, miso, figs",
-  dish: "e.g. lamb ragu, mushroom risotto",
-  beverage: "e.g. natural orange wine, cold brew",
-};
+const SCOPES = [
+  { key: "for_you", label: "For you" },
+  { key: "following", label: "Following" },
+] as const;
 
-export default function PairScreen() {
+export default function FeedScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, refresh } = useAuth();
   const toast = useToast();
 
-  const [category, setCategory] = useState("ingredient");
-  const [query, setQuery] = useState("");
-  const [context, setContext] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [recent, setRecent] = useState<Pairing[] | null>(null);
-  const [usage, setUsage] = useState<Usage | null>(null);
+  const [scope, setScope] = useState<"for_you" | "following">("for_you");
+  const [posts, setPosts] = useState<Post[] | null>(null);
+  const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [unread, setUnread] = useState(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (nextScope = scope) => {
+    setError("");
     try {
-      const [list, u] = await Promise.all([api.pairings(), api.usage()]);
-      setRecent(list);
-      setUsage(u);
+      const [data, notes] = await Promise.all([
+        api.feed(nextScope),
+        api.notifications().catch(() => [] as Notification[]),
+      ]);
+      setPosts(data);
+      setUnread(notes.filter((n) => !n.read).length);
     } catch {
-      setRecent([]);
+      setError("We couldn't load the feed right now.");
     }
-  }, []);
+  }, [scope]);
 
   useFocusEffect(
     useCallback(() => {
@@ -47,152 +47,107 @@ export default function PairScreen() {
     }, [load]),
   );
 
-  const submit = async () => {
-    if (!query.trim()) {
-      toast.show("Type an ingredient, dish or drink first", "info");
-      return;
-    }
-    setBusy(true);
-    try {
-      const result = await api.createPairing({ query: query.trim(), category, context: context.trim() });
-      setQuery("");
-      setContext("");
-      await load();
-      router.push(`/pairing/${result.id}`);
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 402) {
-        router.push("/paywall");
-      } else {
-        toast.show(e instanceof ApiError ? e.message : "Could not reach the kitchen. Try again.", "error");
-      }
-    } finally {
-      setBusy(false);
-      refresh();
-    }
+  const switchScope = (next: "for_you" | "following") => {
+    setScope(next);
+    setPosts(null);
+    load(next);
   };
 
-  const remaining = usage && !usage.is_premium ? Math.max(0, usage.limit - usage.used_today) : null;
+  const share = async (post: Post) => {
+    const text = [
+      post.recipe?.title ?? "A pairing from Pairly",
+      post.caption,
+      post.recipe ? `\nIngredients:\n${post.recipe.ingredients.join("\n")}` : "",
+      "\nShared from Pairly",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    try {
+      await shareToWhatsApp(text);
+    } catch {
+      toast.show("Sharing is unavailable on this device", "error");
+    }
+  };
 
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <View style={styles.headerRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.kicker}>
-              {user?.role === "chef" ? "CHEF MODE" : "HOME KITCHEN"}
-            </Text>
-            <Text testID="home-greeting" style={styles.title}>
-              What are you{"\n"}pairing today?
-            </Text>
-          </View>
+        <View style={styles.headerTop}>
+          <Text style={styles.brand}>Pairly</Text>
           <Pressable
-            testID="usage-pill"
-            onPress={() => router.push("/paywall")}
-            style={[styles.pill, usage?.is_premium && { backgroundColor: colors.surfaceInverse }]}
+            testID="notifications-button"
+            onPress={() => router.push("/notifications")}
+            style={styles.iconBtn}
+            hitSlop={8}
           >
-            <Feather
-              name={usage?.is_premium ? "star" : "zap"}
-              size={12}
-              color={usage?.is_premium ? colors.onSurfaceInverse : colors.brand}
-            />
-            <Text
-              style={[styles.pillText, usage?.is_premium && { color: colors.onSurfaceInverse }]}
-            >
-              {usage?.is_premium ? "Pro" : `${remaining ?? "–"} left`}
-            </Text>
+            <Feather name="bell" size={20} color={colors.onSurface} />
+            {unread > 0 ? (
+              <View testID="notifications-badge" style={styles.badge}>
+                <Text style={styles.badgeText}>{unread > 9 ? "9+" : unread}</Text>
+              </View>
+            ) : null}
           </Pressable>
         </View>
-        <CategoryChips
-          categories={CATEGORIES}
-          value={category}
-          onChange={setCategory}
-          testIDPrefix="category-chip"
-        />
+        <View style={styles.scopeRow}>
+          {SCOPES.map((s) => (
+            <Pressable
+              key={s.key}
+              testID={`feed-scope-${s.key}`}
+              onPress={() => switchScope(s.key)}
+              style={[styles.scope, scope === s.key && styles.scopeActive]}
+            >
+              <Text style={[styles.scopeText, scope === s.key && styles.scopeTextActive]}>{s.label}</Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
-      <KeyboardAwareScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: 140 + insets.bottom }]}
-        bottomOffset={90}
-        keyboardShouldPersistTaps="handled"
-      >
-        <TextInput
-          testID="pairing-query-input"
-          value={query}
-          onChangeText={setQuery}
-          placeholder={PLACEHOLDERS[category]}
-          placeholderTextColor="#B3AEA6"
-          style={styles.bigInput}
-          multiline
-        />
-        <View style={styles.divider} />
-        <Text style={styles.label}>Cooking context (optional)</Text>
-        <TextInput
-          testID="pairing-context-input"
-          value={context}
-          onChangeText={setContext}
-          placeholder="Describe what you're making — a Sunday roast, a summer picnic, a tasting menu…"
-          placeholderTextColor="#B3AEA6"
-          style={styles.contextInput}
-          multiline
-        />
-
-        <View style={styles.recentHead}>
-          <Text style={styles.label}>Recent searches</Text>
-          {recent && recent.length > 0 ? (
-            <Text style={styles.count}>{recent.length}</Text>
-          ) : null}
+      {error ? (
+        <ErrorState message={error} onRetry={() => load()} />
+      ) : posts === null ? (
+        <View style={{ padding: spacing.lg, gap: spacing.lg }}>
+          <Skeleton height={320} />
+          <Skeleton height={320} />
         </View>
-
-        {recent === null ? (
-          <View style={{ gap: spacing.md }}>
-            <Skeleton height={64} />
-            <Skeleton height={64} />
-            <Skeleton height={64} />
-          </View>
-        ) : recent.length === 0 ? (
-          <Text testID="recent-empty-text" style={styles.emptyText}>
-            Your pairing history will appear here. Start with something in your fridge.
-          </Text>
-        ) : (
-          recent.slice(0, 8).map((p) => (
-            <Pressable
-              key={p.id}
-              testID={`recent-item-${p.id}`}
-              onPress={() => router.push(`/pairing/${p.id}`)}
-              style={({ pressed }) => [styles.recentRow, pressed && { opacity: 0.6 }]}
-            >
-              <Image
-                source={{ uri: categoryImage(p.category) }}
-                style={styles.recentThumb}
-                contentFit="cover"
-                transition={200}
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.recentTitle} numberOfLines={1}>
-                  {p.query}
-                </Text>
-                <Text style={styles.recentSub} numberOfLines={1}>
-                  {p.pairings.map((i) => i.name).slice(0, 3).join(" · ")}
-                </Text>
-              </View>
-              {p.is_favorite ? <Feather name="bookmark" size={15} color={colors.brand} /> : null}
-              <Feather name="chevron-right" size={16} color={colors.borderStrong} />
-            </Pressable>
-          ))
-        )}
-      </KeyboardAwareScrollView>
-
-      <KeyboardStickyView offset={{ closed: 0, opened: spacing.lg }}>
-        <View style={[styles.cta, { paddingBottom: insets.bottom > 0 ? spacing.lg : spacing.lg }]}>
-          <PrimaryButton
-            testID="find-pairing-button"
-            label={busy ? "Finding pairings…" : "Find pairings"}
-            icon="git-merge"
-            onPress={submit}
-            loading={busy}
+      ) : posts.length === 0 ? (
+        <View>
+          <EmptyState
+            testID="feed-empty-state"
+            image={images.auth}
+            title={scope === "following" ? "Follow some cooks" : "The kitchen is quiet"}
+            body={
+              scope === "following"
+                ? "Posts from cooks you follow will show up here. Find people in Search."
+                : "Be the first to post a recipe or a plate you're proud of."
+            }
           />
+          <View style={{ paddingHorizontal: spacing.xl }}>
+            <Pressable testID="feed-empty-create" onPress={() => router.push("/create")} style={styles.emptyCta}>
+              <Feather name="plus" size={16} color={colors.onBrand} />
+              <Text style={styles.emptyCtaText}>Create a post</Text>
+            </Pressable>
+          </View>
         </View>
-      </KeyboardStickyView>
+      ) : (
+        <FlatList
+          testID="feed-list"
+          data={posts}
+          keyExtractor={(p) => p.id}
+          contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing.xxl }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              tintColor={colors.brand}
+              onRefresh={async () => {
+                setRefreshing(true);
+                await load();
+                setRefreshing(false);
+              }}
+            />
+          }
+          renderItem={({ item }) => <PostCard post={item} onShare={() => share(item)} />}
+        />
+      )}
     </View>
   );
 }
@@ -203,109 +158,50 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    paddingBottom: spacing.md,
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingHorizontal: spacing.lg,
-    gap: spacing.md,
-  },
-  kicker: {
-    fontFamily: fonts.text,
-    fontSize: 10,
-    letterSpacing: 2,
-    color: colors.brand,
-    fontWeight: "700",
-    marginBottom: spacing.xs,
-  },
-  title: { fontFamily: fonts.display, fontSize: 28, lineHeight: 34, color: colors.onSurface },
-  pill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    height: 30,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.pill,
-    backgroundColor: colors.brandTertiary,
-    marginTop: spacing.md,
-  },
-  pillText: { fontFamily: fonts.text, fontSize: type.sm, color: colors.brand, fontWeight: "700" },
-  scroll: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
-  bigInput: {
-    fontFamily: fonts.display,
-    fontSize: 26,
-    lineHeight: 34,
-    color: colors.onSurface,
-    minHeight: 76,
-    textAlignVertical: "top",
-  },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.lg },
-  label: {
-    fontFamily: fonts.text,
-    fontSize: type.sm,
-    letterSpacing: 1.1,
-    textTransform: "uppercase",
-    color: colors.muted,
-    fontWeight: "600",
-    marginBottom: spacing.sm,
-  },
-  contextInput: {
-    fontFamily: fonts.text,
-    fontSize: type.lg,
-    lineHeight: 24,
-    color: colors.onSurface,
-    minHeight: 64,
-    textAlignVertical: "top",
-    backgroundColor: colors.surfaceSecondary,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-  },
-  recentHead: {
+  headerTop: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: spacing.xxl,
-    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.lg,
   },
-  count: { fontFamily: fonts.text, fontSize: type.sm, color: colors.muted },
-  emptyText: {
-    fontFamily: fonts.text,
-    fontSize: type.base,
-    color: colors.muted,
-    lineHeight: 21,
-    paddingVertical: spacing.md,
-  },
-  recentRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    paddingVertical: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  recentIcon: {
-    width: 36,
-    height: 36,
+  brand: { fontFamily: fonts.display, fontSize: 26, color: colors.onSurface },
+  iconBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  badge: {
+    position: "absolute",
+    top: 8,
+    right: 6,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 3,
     borderRadius: radius.pill,
-    backgroundColor: colors.brandTertiary,
+    backgroundColor: colors.brand,
     alignItems: "center",
     justifyContent: "center",
   },
-  recentThumb: {
-    width: 52,
-    height: 52,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surfaceTertiary,
-  },
-  recentTitle: { fontFamily: fonts.display, fontSize: type.lg, color: colors.onSurface },
-  recentSub: { fontFamily: fonts.text, fontSize: type.sm, color: colors.muted, marginTop: 2 },
-  cta: {
+  badgeText: { fontFamily: fonts.text, fontSize: 9, color: colors.onBrand, fontWeight: "700" },
+  scopeRow: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.lg, marginTop: spacing.xs },
+  scope: {
+    height: 34,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSecondary,
+    justifyContent: "center",
   },
+  scopeActive: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
+  scopeText: { fontFamily: fonts.text, fontSize: type.base, color: colors.muted, fontWeight: "500" },
+  scopeTextActive: { color: colors.onSurfaceInverse, fontWeight: "600" },
+  emptyCta: {
+    height: 52,
+    borderRadius: radius.md,
+    backgroundColor: colors.brand,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+  },
+  emptyCtaText: { fontFamily: fonts.text, fontSize: type.lg, fontWeight: "600", color: colors.onBrand },
 });

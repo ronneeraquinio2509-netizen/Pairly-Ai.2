@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 4 (both) — Slice 1 social layer end-to-end. Backend: 24/25 new tests pass (test_pairly_iter4_social.py). Verified: POST /api/posts photo + recipe with proper 400s (recipe missing title, photo with no image + no caption), GET/DELETE /posts with owner-only delete, GET /feed for_you + following (following scope correctly limited to followed users + self), like toggle keeps like_count consistent, comments + parent_id replies + author cards + comment_count decrement on delete + cross-user delete rejected, /collections auto-creates Favorites/Want To Cook/Meal Ideas, duplicate collection 400, bookmark toggle + cross-user collection listing 404, follow toggle with self=400/unknown=404, public profile hides email + returns is_following/is_self/counts/posts, followers + following lists, /me/liked, profile update taken=400/invalid chars=400 + bio/location/cuisine/avatar_b64 persist, /search returns {users,posts,pairings} shape and honours filters, /pairings items now carry flavor_profile+nutrition_notes+alternatives, recipe generator empty ingredients+goal=400 and full recipe returns {id, recipe:{title,ingredients,instructions,nutrition,shopping_list,drink_pairing,...}} — real LLM call took ~19s.\n\nONE BACKEND BUG FOUND: POST /api/recipes/generate calls ensure_quota() but used_today() (server.py:480) only counts pairings + menus + chat_messages — recipe generations do NOT increment used_today. Effect: a free user can generate unlimited recipes as long as their pairing+menu+chat count is <5. Spec says recipe generation should count toward the 5/day cap.\n\nFrontend (Expo web, 390x844): login (had to click auth-tab-login first as default is signup), then all 5 bottom tabs Home/Search/Create/AI/Profile navigate correctly. Home = feed-scope-for_you/following toggle + notifications-button + post-card with like/comment/bookmark/share testIDs — one real post rendered (Marco, chef, 'Charred leeks with hazelnut', #leeks #vegetarian, 1 like, 1 comment). Search = search-input + type chips (all/recipes/posts/users/pairings) + search-filters-toggle + search-run-button. AI hub = ai-usage-pill ('5 free AI requests left today') + 5 tool cards (ai-pair, ai-recipe, ai-chat, ai-menus, saved-pairings). Profile = avatar + Home Cook + @homecook + bio ('TEST bio 1dd878') + location + fav cuisine + 4 stats + Edit profile + Posts/Collections/Liked tabs. Create = photo/recipe kind toggle, Add photo, caption, hashtags, Publish button.\n\nRegression warning still present since iteration 2: 'props.pointerEvents is deprecated. Use style.pointerEvents' from /app/frontend/app/pairing/[id].tsx off-screen share-card wrapper — the fix has now been outstanding for three iterations.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/recipes/generate", "issue": "Recipe generation does not count toward used_today / daily free quota. server.py:480 used_today() only counts pairings + menus + chat_messages. Spec requires recipe generation to count toward the 5/day cap (402 when exhausted). Fix: extend used_today() to also count db.ai_recipes for the day.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "PairingDetail off-screen share-card wrapper", "issue": "Deprecation warning still emitted: `props.pointerEvents is deprecated. Use style.pointerEvents`. Reference: /app/frontend/app/pairing/[id].tsx — reported since iteration 2, still not fixed."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_pairly_iter4_social.py",
+    "/app/backend/tests/test_pairly_new_features.py",
+    "/app/backend/tests/test_pairly_backend.py",
+    "/app/test_reports/pytest/iter4.xml"
+  ],
+  "action_items": [
+    "Fix quota bug in /app/backend/server.py used_today(): add db.ai_recipes count for today so /api/recipes/generate is counted toward the free 5/day cap (matches the iteration spec).",
+    "Cosmetic (carried since iter2): migrate off-screen wrapper in /app/frontend/app/pairing/[id].tsx from `pointerEvents='none'` prop to `style={{ pointerEvents: 'none' }}` to silence RN Web deprecation.",
+    "Optional UX: add testID to the bottom Tabs.Screen items in /app/frontend/app/(tabs)/_layout.tsx (e.g., tab-home/tab-search/tab-create/tab-ai/tab-profile) so future Playwright tests don't have to fall back to text matching."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now ~1527 lines — well past the 700-line soft limit. Strongly recommend splitting into modules: auth, ai (llm+image+recipe), social (posts+comments+likes+follows+bookmarks+collections), search, chat, paypal. Maintainability risk grows with each iteration.",
+    "used_today() is the single quota source of truth but the list of tracked collections is hard-coded (pairings + menus + chat_messages). Adding /recipes/generate without updating it is exactly how the reported quota bug slipped in. Consider a central 'ai_events' collection or a decorator that stamps `ai_event: true` on all quota-consuming inserts.",
+    "toggle_bookmark falls back to Favorites when the requested collection_name doesn't match — this silently ignores the client's chosen collection instead of returning 400 for an unknown collection. Consider validating the collection name explicitly.",
+    "Frontend tab bar items lack testID props, so E2E tests fall back to fragile text selectors (Search, AI, Create can conflict with in-screen text)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_pairly_iter4_social.py (new — 25 tests for social/collections/search/recipe/profile/pairing extension)"
+  ],
+  "success_rate": {"backend": "96% (24/25 new tests + prior 20/20 + 11/11 unchanged)", "frontend": "100% on tested flows (5-tab navigation, home feed rendering with post card and scope toggle, search screen shell, AI hub with 5 tools + usage pill, profile with stats and 3 tabs, create with photo/recipe kinds)"},
+  "seed_data_creation": "Ephemeral: TEST_recipegen_* free-tier user created for the LLM recipe test and torn down. Test posts/comments/bookmarks all cleaned up in fixture teardowns. chef@pairly.app and cook@pairly.app profiles were touched (cook's bio/location/favorite_cuisine/avatar set to TEST_* values — main agent may want to reset via PUT /api/profile if pristine state matters).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "chef@pairly.app + cook@pairly.app exist; cook now has a base64 avatar + bio 'TEST bio ...' + location 'TEST city' + favorite_cuisine 'italian' from the profile-update test. Backend suite files: test_pairly_backend.py (auth/pairing base), test_pairly_new_features.py (image+chat+quota iter3), test_pairly_iter4_social.py (this iteration's social+collections+search+recipe+profile+pairing-extension). The one open bug is the recipe-generator quota — once main agent fixes used_today() to include ai_recipes, rerun TestRecipeGenerator::test_generate_recipe_ok and it should flip green. Auth flow gotcha: default auth tab is Signup, tests must click [data-testid='auth-tab-login'] BEFORE filling.",
+  "rca_of_issue": "Quota bug RCA: /api/recipes/generate at server.py:1330 correctly calls ensure_quota(user) which gates on used_today() >= 5. However used_today() at server.py:480-488 aggregates counts only from db.pairings + db.menus + db.chat_messages — db.ai_recipes was never added when the recipe generator was introduced. Reproduction: signup fresh user → POST /api/recipes/generate with any valid ingredients → GET /api/usage → used_today stays at 0. Mitigation: extend used_today() with `db.ai_recipes.count_documents({'user_id': user_id, 'created_at': today})` (and consider centralising quota-consuming collections into a single list to prevent regressions on future AI endpoints)."
+}

@@ -89,6 +89,9 @@ export default function MenusScreen() {
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+        <Pressable testID="menus-back-button" onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
+          <Feather name="arrow-left" size={20} color={colors.onSurface} />
+        </Pressable>
         <Text style={styles.kicker}>{user?.role === "chef" ? "CHEF TOOLS" : "BATCH PAIRING"}</Text>
         <Text style={styles.title}>Menu builder</Text>
         <Text style={styles.sub}>Drop in your hero ingredients — get a coursed menu with pairings.</Text>
@@ -256,6 +259,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   kicker: { fontFamily: fonts.text, fontSize: 10, letterSpacing: 2, color: colors.brand, fontWeight: "700" },
+  backBtn: { width: 44, height: 40, marginLeft: -spacing.md, justifyContent: "center" },
   title: { fontFamily: fonts.display, fontSize: 28, color: colors.onSurface, marginTop: spacing.xs },
   sub: { fontFamily: fonts.text, fontSize: type.base, color: colors.muted, marginTop: spacing.xs, lineHeight: 20 },
   scroll: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl },

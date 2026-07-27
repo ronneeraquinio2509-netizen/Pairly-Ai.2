@@ -1,8 +1,8 @@
 import Feather from "@expo/vector-icons/Feather";
 import { Tabs } from "expo-router";
-import { Platform, StyleSheet } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 
-import { colors, fonts, spacing, type } from "@/src/theme";
+import { colors, fonts, radius, spacing, type } from "@/src/theme";
 
 export default function TabsLayout() {
   return (
@@ -20,29 +20,33 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Pair",
+          title: "Home",
+          tabBarIcon: ({ color }) => <Feather name="home" size={20} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="search"
+        options={{
+          title: "Search",
           tabBarIcon: ({ color }) => <Feather name="search" size={20} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="chat"
+        name="create"
         options={{
-          title: "Ask",
-          tabBarIcon: ({ color }) => <Feather name="message-circle" size={20} color={color} />,
+          title: "Create",
+          tabBarIcon: ({ focused }) => (
+            <View style={[styles.createBtn, focused && { backgroundColor: colors.surfaceInverse }]}>
+              <Feather name="plus" size={18} color={colors.onBrand} />
+            </View>
+          ),
         }}
       />
       <Tabs.Screen
-        name="saved"
+        name="ai"
         options={{
-          title: "Saved",
-          tabBarIcon: ({ color }) => <Feather name="bookmark" size={20} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="menus"
-        options={{
-          title: "Menus",
-          tabBarIcon: ({ color }) => <Feather name="layers" size={20} color={color} />,
+          title: "AI",
+          tabBarIcon: ({ color }) => <Feather name="git-merge" size={20} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -65,4 +69,12 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.select({ ios: spacing.xl, default: spacing.sm }),
   },
   tabLabel: { fontFamily: fonts.text, fontSize: type.sm, fontWeight: "600" },
+  createBtn: {
+    width: 34,
+    height: 26,
+    borderRadius: radius.sm,
+    backgroundColor: colors.brand,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

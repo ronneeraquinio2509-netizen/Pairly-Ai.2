@@ -1,276 +1,293 @@
 import Feather from "@expo/vector-icons/Feather";
+import { Image } from "expo-image";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ApiError, api, Usage } from "@/src/api";
+import { Collection, Post, PublicProfile, api } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
-import { useToast } from "@/src/components/toast";
-import { PrimaryButton } from "@/src/components/ui";
+import { PostCard } from "@/src/components/post-card";
+import { Skeleton } from "@/src/components/ui";
 import { colors, fonts, radius, spacing, type } from "@/src/theme";
 
-const DIETS = ["none", "vegetarian", "vegan", "pescatarian", "gluten-free", "keto"];
-const SPICE = ["mild", "medium", "hot"];
-const CUISINES = ["Italian", "Japanese", "Indian", "Mexican", "French", "Middle Eastern", "Thai", "Nordic"];
+const TABS = [
+  { key: "posts", label: "Posts" },
+  { key: "saved", label: "Collections" },
+  { key: "liked", label: "Liked" },
+];
 
-export default function ProfileScreen() {
+export default function ProfileTab() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, setUser, signOut } = useAuth();
-  const toast = useToast();
+  const { user } = useAuth();
 
-  const [name, setName] = useState(user?.name ?? "");
-  const [role, setRole] = useState(user?.role ?? "home_cook");
-  const [diet, setDiet] = useState(user?.preferences.diet ?? "none");
-  const [spice, setSpice] = useState(user?.preferences.spice ?? "medium");
-  const [cuisines, setCuisines] = useState<string[]>(user?.preferences.cuisines ?? []);
-  const [avoid, setAvoid] = useState(user?.preferences.avoid ?? "");
-  const [usage, setUsage] = useState<Usage | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const [tab, setTab] = useState("posts");
+  const [collections, setCollections] = useState<Collection[] | null>(null);
+  const [liked, setLiked] = useState<Post[] | null>(null);
+
+  const load = useCallback(async () => {
+    if (!user) return;
+    try {
+      const [p, c] = await Promise.all([api.publicProfile(user.id), api.collections()]);
+      setProfile(p);
+      setCollections(c);
+    } catch {
+      setProfile(null);
+    }
+  }, [user]);
 
   useFocusEffect(
     useCallback(() => {
-      api.usage().then(setUsage).catch(() => setUsage(null));
-    }, []),
+      load();
+    }, [load]),
   );
 
-  const save = async () => {
-    setBusy(true);
-    try {
-      const updated = await api.updateProfile({
-        name: name.trim() || user?.name,
-        role,
-        preferences: { diet, spice, cuisines, avoid: avoid.trim() },
-      });
-      setUser(updated);
-      toast.show("Preferences saved", "success");
-    } catch (e) {
-      toast.show(e instanceof ApiError ? e.message : "Could not save preferences", "error");
-    } finally {
-      setBusy(false);
+  const openLiked = async () => {
+    setTab("liked");
+    if (liked === null) {
+      try {
+        setLiked(await api.likedPosts());
+      } catch {
+        setLiked([]);
+      }
     }
   };
 
   return (
-    <View style={styles.root}>
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Text style={styles.kicker}>YOUR KITCHEN</Text>
-        <Text style={styles.title}>Profile</Text>
+    <ScrollView
+      style={styles.root}
+      testID="profile-scroll"
+      contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}
+    >
+      <View style={styles.cover}>
+        {profile?.cover_b64 ? (
+          <Image
+            source={{ uri: `data:image/jpeg;base64,${profile.cover_b64}` }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+          />
+        ) : null}
+        <View style={[styles.coverActions, { paddingTop: insets.top + spacing.sm }]}>
+          <Pressable
+            testID="profile-settings-button"
+            onPress={() => router.push("/settings")}
+            style={styles.roundBtn}
+            hitSlop={8}
+          >
+            <Feather name="settings" size={17} color={colors.onSurface} />
+          </Pressable>
+        </View>
       </View>
 
-      <KeyboardAwareScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + spacing.xxl }]}
-        bottomOffset={spacing.xxl}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.identity}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{(user?.name ?? "?").charAt(0).toUpperCase()}</Text>
+      <View style={styles.identity}>
+        {user?.avatar_b64 ? (
+          <Image
+            source={{ uri: `data:image/jpeg;base64,${user.avatar_b64}` }}
+            style={styles.avatar}
+            contentFit="cover"
+          />
+        ) : (
+          <View style={[styles.avatar, styles.avatarFallback]}>
+            <Text style={styles.avatarLetter}>{(user?.name ?? "?").charAt(0).toUpperCase()}</Text>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.identityName}>{user?.name}</Text>
-            <Text style={styles.identityEmail}>{user?.email}</Text>
-          </View>
+        )}
+        <Text testID="profile-name" style={styles.name}>
+          {user?.name}
+        </Text>
+        <Text style={styles.username}>
+          @{user?.username} · {user?.role === "chef" ? "Chef" : "Home cook"}
+          {user?.is_premium ? " · Pro" : ""}
+        </Text>
+        {user?.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
+        <View style={styles.metaRow}>
+          {user?.location ? (
+            <View style={styles.metaItem}>
+              <Feather name="map-pin" size={12} color={colors.muted} />
+              <Text style={styles.metaText}>{user.location}</Text>
+            </View>
+          ) : null}
+          {user?.favorite_cuisine ? (
+            <View style={styles.metaItem}>
+              <Feather name="heart" size={12} color={colors.muted} />
+              <Text style={styles.metaText}>{user.favorite_cuisine}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.stats}>
+          {[
+            { label: "Posts", value: profile?.post_count ?? 0, href: null },
+            { label: "Recipes", value: profile?.recipe_count ?? 0, href: null },
+            { label: "Followers", value: profile?.followers_count ?? 0, href: `/user/${user?.id}` },
+            { label: "Following", value: profile?.following_count ?? 0, href: `/user/${user?.id}` },
+          ].map((s) => (
+            <View key={s.label} style={styles.stat}>
+              <Text testID={`profile-stat-${s.label.toLowerCase()}`} style={styles.statValue}>
+                {s.value}
+              </Text>
+              <Text style={styles.statLabel}>{s.label}</Text>
+            </View>
+          ))}
         </View>
 
         <Pressable
-          testID="premium-banner"
-          onPress={() => router.push("/paywall")}
-          style={[styles.premium, user?.is_premium && { backgroundColor: colors.surfaceInverse }]}
+          testID="profile-edit-button"
+          onPress={() => router.push("/settings")}
+          style={styles.editBtn}
         >
-          <Feather
-            name={user?.is_premium ? "star" : "zap"}
-            size={18}
-            color={user?.is_premium ? colors.warning : colors.brand}
-          />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.premiumTitle, user?.is_premium && { color: colors.onSurfaceInverse }]}>
-              {user?.is_premium ? "Pairly Pro — active" : "Pairly Pro"}
-            </Text>
-            <Text style={[styles.premiumBody, user?.is_premium && { color: "rgba(250,249,246,0.7)" }]}>
-              {user?.is_premium
-                ? "Unlimited pairings and menus"
-                : usage
-                  ? `${usage.used_today} of ${usage.limit} free pairings used today`
-                  : "Unlock unlimited pairings"}
-            </Text>
-          </View>
-          {!user?.is_premium ? <Feather name="chevron-right" size={18} color={colors.brand} /> : null}
+          <Feather name="edit-2" size={14} color={colors.onSurface} />
+          <Text style={styles.editText}>Edit profile</Text>
         </Pressable>
+      </View>
 
-        <Text style={styles.label}>Display name</Text>
-        <TextInput
-          testID="profile-name-input"
-          value={name}
-          onChangeText={setName}
-          style={styles.input}
-          placeholder="Your name"
-          placeholderTextColor="#B3AEA6"
-        />
+      <View style={styles.tabs}>
+        {TABS.map((t) => (
+          <Pressable
+            key={t.key}
+            testID={`profile-tab-${t.key}`}
+            onPress={() => (t.key === "liked" ? openLiked() : setTab(t.key))}
+            style={[styles.tab, tab === t.key && styles.tabActive]}
+          >
+            <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>{t.label}</Text>
+          </Pressable>
+        ))}
+      </View>
 
-        <Text style={styles.label}>Cooking mode</Text>
-        <View style={styles.row}>
-          {[
-            { key: "home_cook", label: "Home Cook" },
-            { key: "chef", label: "Chef" },
-          ].map((r) => (
-            <Pressable
-              key={r.key}
-              testID={`profile-role-${r.key}`}
-              onPress={() => setRole(r.key as "home_cook" | "chef")}
-              style={[styles.option, role === r.key && styles.optionActive]}
-            >
-              <Text style={[styles.optionText, role === r.key && styles.optionTextActive]}>{r.label}</Text>
-            </Pressable>
-          ))}
-        </View>
+      <View style={styles.content}>
+        {tab === "posts" ? (
+          profile === null ? (
+            <Skeleton height={260} />
+          ) : profile.posts.length === 0 ? (
+            <Text testID="profile-posts-empty" style={styles.empty}>
+              You haven't posted yet. Share a recipe or a plate from the Create tab.
+            </Text>
+          ) : (
+            profile.posts.map((p) => <PostCard key={p.id} post={p} />)
+          )
+        ) : null}
 
-        <Text style={[styles.label, { marginTop: spacing.xl }]}>Diet</Text>
-        <View style={styles.wrap}>
-          {DIETS.map((d) => (
-            <Pressable
-              key={d}
-              testID={`profile-diet-${d}`}
-              onPress={() => setDiet(d)}
-              style={[styles.option, diet === d && styles.optionActive]}
-            >
-              <Text style={[styles.optionText, diet === d && styles.optionTextActive]}>{d}</Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <Text style={[styles.label, { marginTop: spacing.xl }]}>Spice level</Text>
-        <View style={styles.row}>
-          {SPICE.map((s) => (
-            <Pressable
-              key={s}
-              testID={`profile-spice-${s}`}
-              onPress={() => setSpice(s)}
-              style={[styles.option, spice === s && styles.optionActive]}
-            >
-              <Text style={[styles.optionText, spice === s && styles.optionTextActive]}>{s}</Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <Text style={[styles.label, { marginTop: spacing.xl }]}>Favourite cuisines</Text>
-        <View style={styles.wrap}>
-          {CUISINES.map((c) => {
-            const active = cuisines.includes(c);
-            return (
+        {tab === "saved" ? (
+          collections === null ? (
+            <Skeleton height={120} />
+          ) : (
+            collections.map((c) => (
               <Pressable
-                key={c}
-                testID={`profile-cuisine-${c.replace(/\s/g, "-").toLowerCase()}`}
-                onPress={() =>
-                  setCuisines((prev) => (active ? prev.filter((x) => x !== c) : [...prev, c]))
-                }
-                style={[styles.option, active && styles.optionActive]}
+                key={c.id}
+                testID={`collection-row-${c.id}`}
+                onPress={() => router.push(`/collection/${c.id}?name=${encodeURIComponent(c.name)}`)}
+                style={styles.collectionRow}
               >
-                <Text style={[styles.optionText, active && styles.optionTextActive]}>{c}</Text>
+                <View style={styles.collectionIcon}>
+                  <Feather name="bookmark" size={16} color={colors.brand} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.collectionName}>{c.name}</Text>
+                  <Text style={styles.collectionCount}>
+                    {c.count} {c.count === 1 ? "item" : "items"}
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={colors.borderStrong} />
               </Pressable>
-            );
-          })}
-        </View>
+            ))
+          )
+        ) : null}
 
-        <Text style={[styles.label, { marginTop: spacing.xl }]}>Ingredients to avoid</Text>
-        <TextInput
-          testID="profile-avoid-input"
-          value={avoid}
-          onChangeText={setAvoid}
-          style={styles.input}
-          placeholder="Cilantro, shellfish…"
-          placeholderTextColor="#B3AEA6"
-        />
-
-        <View style={{ height: spacing.md }} />
-        <PrimaryButton testID="profile-save-button" label="Save preferences" onPress={save} loading={busy} />
-        <View style={{ height: spacing.md }} />
-        <PrimaryButton
-          testID="sign-out-button"
-          label="Sign out"
-          variant="ghost"
-          icon="log-out"
-          onPress={async () => {
-            await signOut();
-            router.replace("/(auth)");
-          }}
-        />
-      </KeyboardAwareScrollView>
-    </View>
+        {tab === "liked" ? (
+          liked === null ? (
+            <Skeleton height={260} />
+          ) : liked.length === 0 ? (
+            <Text testID="profile-liked-empty" style={styles.empty}>
+              Posts you like will collect here.
+            </Text>
+          ) : (
+            liked.map((p) => <PostCard key={p.id} post={p} />)
+          )
+        ) : null}
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
-  header: {
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.lg,
-  },
-  kicker: { fontFamily: fonts.text, fontSize: 10, letterSpacing: 2, color: colors.brand, fontWeight: "700" },
-  title: { fontFamily: fonts.display, fontSize: 28, color: colors.onSurface, marginTop: spacing.xs },
-  scroll: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl },
-  identity: { flexDirection: "row", alignItems: "center", gap: spacing.lg, marginBottom: spacing.xl },
-  avatar: {
-    width: 56,
-    height: 56,
+  cover: { height: 140, backgroundColor: colors.surfaceTertiary },
+  coverActions: { flexDirection: "row", justifyContent: "flex-end", paddingHorizontal: spacing.lg },
+  roundBtn: {
+    width: 38,
+    height: 38,
     borderRadius: radius.pill,
-    backgroundColor: colors.brand,
+    backgroundColor: colors.surfaceSecondary,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarText: { fontFamily: fonts.display, fontSize: type.xxl, color: colors.onBrand },
-  identityName: { fontFamily: fonts.display, fontSize: type.xl, color: colors.onSurface },
-  identityEmail: { fontFamily: fonts.text, fontSize: type.base, color: colors.muted, marginTop: 2 },
-  premium: {
+  identity: { paddingHorizontal: spacing.lg, marginTop: -32 },
+  avatar: {
+    width: 76,
+    height: 76,
+    borderRadius: radius.pill,
+    borderWidth: 3,
+    borderColor: colors.surface,
+    backgroundColor: colors.surfaceTertiary,
+  },
+  avatarFallback: { alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },
+  avatarLetter: { fontFamily: fonts.display, fontSize: 30, color: colors.onBrand },
+  name: { fontFamily: fonts.display, fontSize: type.xxl, color: colors.onSurface, marginTop: spacing.md },
+  username: { fontFamily: fonts.text, fontSize: type.base, color: colors.muted, marginTop: 2 },
+  bio: { fontFamily: fonts.text, fontSize: type.base, color: colors.onSurface, lineHeight: 21, marginTop: spacing.md },
+  metaRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.lg, marginTop: spacing.md },
+  metaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
+  metaText: { fontFamily: fonts.text, fontSize: type.sm, color: colors.muted },
+  stats: { flexDirection: "row", gap: spacing.xl, marginTop: spacing.lg },
+  stat: {},
+  statValue: { fontFamily: fonts.display, fontSize: type.xl, color: colors.onSurface },
+  statLabel: { fontFamily: fonts.text, fontSize: type.sm, color: colors.muted },
+  editBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    height: 44,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    marginTop: spacing.lg,
+  },
+  editText: { fontFamily: fonts.text, fontSize: type.base, color: colors.onSurface, fontWeight: "600" },
+  tabs: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  tab: { paddingVertical: spacing.md, paddingHorizontal: spacing.md, borderBottomWidth: 2, borderBottomColor: "transparent" },
+  tabActive: { borderBottomColor: colors.brand },
+  tabText: { fontFamily: fonts.text, fontSize: type.base, color: colors.muted, fontWeight: "600" },
+  tabTextActive: { color: colors.onSurface },
+  content: { padding: spacing.lg },
+  empty: { fontFamily: fonts.text, fontSize: type.base, color: colors.muted, lineHeight: 21 },
+  collectionRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
-    backgroundColor: colors.brandTertiary,
+    backgroundColor: colors.surfaceSecondary,
+    borderWidth: 1,
+    borderColor: colors.border,
     borderRadius: radius.md,
     padding: spacing.lg,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.md,
   },
-  premiumTitle: { fontFamily: fonts.display, fontSize: type.lg, color: colors.onSurface },
-  premiumBody: { fontFamily: fonts.text, fontSize: type.sm, color: colors.muted, marginTop: 2 },
-  label: {
-    fontFamily: fonts.text,
-    fontSize: type.sm,
-    letterSpacing: 1.1,
-    textTransform: "uppercase",
-    color: colors.muted,
-    fontWeight: "600",
-    marginBottom: spacing.sm,
-  },
-  input: {
-    height: 52,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSecondary,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    fontFamily: fonts.text,
-    fontSize: type.lg,
-    color: colors.onSurface,
-    marginBottom: spacing.xl,
-  },
-  row: { flexDirection: "row", gap: spacing.sm },
-  wrap: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  option: {
-    height: 40,
-    paddingHorizontal: spacing.lg,
+  collectionIcon: {
+    width: 38,
+    height: 38,
     borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: colors.brandTertiary,
     alignItems: "center",
     justifyContent: "center",
   },
-  optionActive: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
-  optionText: { fontFamily: fonts.text, fontSize: type.base, color: colors.muted, fontWeight: "500", textTransform: "capitalize" },
-  optionTextActive: { color: colors.onSurfaceInverse, fontWeight: "600" },
+  collectionName: { fontFamily: fonts.display, fontSize: type.lg, color: colors.onSurface },
+  collectionCount: { fontFamily: fonts.text, fontSize: type.sm, color: colors.muted, marginTop: 1 },
 });

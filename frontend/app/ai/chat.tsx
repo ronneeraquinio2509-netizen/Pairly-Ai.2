@@ -93,6 +93,9 @@ export default function ChatScreen() {
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+        <Pressable testID="chat-back-button" onPress={() => router.back()} style={styles.iconBtn} hitSlop={8}>
+          <Feather name="arrow-left" size={20} color={colors.onSurface} />
+        </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={styles.kicker}>{user?.role === "chef" ? "SOUS CHEF" : "KITCHEN COMPANION"}</Text>
           <Text style={styles.title}>Ask Pairly</Text>

@@ -88,10 +88,18 @@ class Preferences(BaseModel):
 class UserDoc(BaseDocument):
     email: str
     name: str
+    username: str = ""
     role: str = "home_cook"
     password_hash: str
+    bio: str = ""
+    location: str = ""
+    favorite_cuisine: str = ""
+    website: str = ""
+    avatar_b64: Optional[str] = None
+    cover_b64: Optional[str] = None
     preferences: Preferences = Preferences()
     is_premium: bool = False
+    is_creator: bool = False
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -100,6 +108,9 @@ class PairingItem(BaseModel):
     category: str = ""
     why: str = ""
     tip: str = ""
+    flavor_profile: str = ""
+    nutrition_notes: str = ""
+    alternatives: List[str] = []
 
 
 class PairingDoc(BaseDocument):
@@ -143,6 +154,75 @@ class MenuDoc(BaseDocument):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
+# ------------------------------------------------- Social / recipe models
+
+
+class Nutrition(BaseModel):
+    calories: str = ""
+    protein: str = ""
+    carbs: str = ""
+    fat: str = ""
+
+
+class RecipeData(BaseModel):
+    title: str = ""
+    description: str = ""
+    cuisine: str = ""
+    difficulty: str = "Beginner"
+    prep_time_min: int = 0
+    cook_time_min: int = 0
+    servings: int = 2
+    ingredients: List[str] = []
+    instructions: List[str] = []
+    nutrition: Nutrition = Nutrition()
+    tags: List[str] = []
+    diet: str = ""
+    shopping_list: List[str] = []
+    drink_pairing: str = ""
+    dessert_pairing: str = ""
+    ingredient_alternatives: List[str] = []
+
+
+class PostDoc(BaseDocument):
+    user_id: PyObjectId
+    kind: str = "photo"  # photo | recipe | pairing
+    caption: str = ""
+    hashtags: List[str] = []
+    images: List[str] = []  # compressed base64 JPEG
+    recipe: Optional[RecipeData] = None
+    pairing_id: Optional[PyObjectId] = None
+    like_count: int = 0
+    comment_count: int = 0
+    bookmark_count: int = 0
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class CommentDoc(BaseDocument):
+    post_id: PyObjectId
+    user_id: PyObjectId
+    parent_id: Optional[PyObjectId] = None
+    content: str
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class CollectionDoc(BaseDocument):
+    user_id: PyObjectId
+    name: str
+    post_ids: List[str] = []
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class NotificationDoc(BaseDocument):
+    user_id: PyObjectId
+    actor_id: PyObjectId
+    actor_name: str = ""
+    kind: str = "like"  # like | comment | follow | bookmark
+    post_id: Optional[PyObjectId] = None
+    message: str = ""
+    read: bool = False
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
 # ---------------------------------------------------------------- Requests
 
 
@@ -160,7 +240,14 @@ class LoginReq(BaseModel):
 
 class ProfileReq(BaseModel):
     name: Optional[str] = None
+    username: Optional[str] = None
     role: Optional[str] = None
+    bio: Optional[str] = None
+    location: Optional[str] = None
+    favorite_cuisine: Optional[str] = None
+    website: Optional[str] = None
+    avatar_b64: Optional[str] = None
+    cover_b64: Optional[str] = None
     preferences: Optional[Preferences] = None
 
 
@@ -182,6 +269,39 @@ class CaptureReq(BaseModel):
 
 class ChatReq(BaseModel):
     message: str = Field(min_length=1)
+
+
+class PostReq(BaseModel):
+    kind: str = "photo"
+    caption: str = ""
+    hashtags: List[str] = []
+    images: List[str] = []
+    recipe: Optional[RecipeData] = None
+    pairing_id: Optional[str] = None
+
+
+class CommentReq(BaseModel):
+    content: str = Field(min_length=1)
+    parent_id: Optional[str] = None
+
+
+class BookmarkReq(BaseModel):
+    collection_name: str = "Favorites"
+
+
+class CollectionReq(BaseModel):
+    name: str = Field(min_length=1)
+
+
+class RecipeGenReq(BaseModel):
+    ingredients: List[str] = []
+    cuisine: str = ""
+    diet: str = ""
+    budget: str = ""
+    cooking_time: str = ""
+    difficulty: str = ""
+    calories: str = ""
+    goal: str = ""
 
 
 # ---------------------------------------------------------------- Auth utils
@@ -227,16 +347,34 @@ def public_user(u: UserDoc) -> dict:
         "id": u.id,
         "email": u.email,
         "name": u.name,
+        "username": u.username,
         "role": u.role,
+        "bio": u.bio,
+        "location": u.location,
+        "favorite_cuisine": u.favorite_cuisine,
+        "website": u.website,
+        "avatar_b64": u.avatar_b64,
+        "cover_b64": u.cover_b64,
         "preferences": u.preferences.model_dump(),
         "is_premium": u.is_premium,
+        "is_creator": u.is_creator,
     }
+
+
+async def unique_username(base: str) -> str:
+    slug = re.sub(r"[^a-z0-9_]", "", base.lower().split("@")[0])[:18] or "cook"
+    candidate = slug
+    n = 1
+    while await db.users.find_one({"username": candidate}):
+        n += 1
+        candidate = f"{slug}{n}"
+    return candidate
 
 
 # ---------------------------------------------------------------- AI engine
 
 SCHEMA_HINT = """Respond with ONLY valid minified JSON, no markdown fences, matching:
-{"headline":"short editorial title","summary":"1-2 sentence overview","pairings":[{"name":"...","category":"ingredient|dish|beverage|sauce|side","why":"1-2 sentences on why it works flavour-wise","tip":"one short serving tip"}],"mini_recipe_title":"...","mini_recipe_steps":["step 1","step 2","step 3","step 4"]}
+{"headline":"short editorial title","summary":"1-2 sentence overview","pairings":[{"name":"...","category":"ingredient|dish|beverage|sauce|side","why":"1-2 sentences on why it works flavour-wise","tip":"one short serving tip","flavor_profile":"3-6 words on the flavour profile e.g. bright, herbaceous, tannic","nutrition_notes":"one short line on the nutritional angle","alternatives":["2-3 swap options"]}],"mini_recipe_title":"...","mini_recipe_steps":["step 1","step 2","step 3","step 4"]}
 Return exactly 5 pairings and 3-5 recipe steps."""
 
 
@@ -376,6 +514,7 @@ async def signup(body: SignupReq):
     user = UserDoc(
         email=email,
         name=body.name.strip(),
+        username=await unique_username(body.name or email),
         role=body.role if body.role in ("home_cook", "chef") else "home_cook",
         password_hash=hash_password(body.password),
     )
@@ -403,8 +542,24 @@ async def update_profile(body: ProfileReq, user: UserDoc = Depends(current_user)
     updates: dict = {}
     if body.name:
         updates["name"] = body.name.strip()
+    if body.username:
+        slug = re.sub(r"[^a-z0-9_]", "", body.username.lower())[:18]
+        if not slug:
+            raise HTTPException(status_code=400, detail="Username can only use letters, numbers and _")
+        clash = await db.users.find_one({"username": slug, "_id": {"$ne": ObjectId(user.id)}})
+        if clash:
+            raise HTTPException(status_code=400, detail="That username is already taken")
+        updates["username"] = slug
     if body.role in ("home_cook", "chef"):
         updates["role"] = body.role
+    for field in ("bio", "location", "favorite_cuisine", "website"):
+        value = getattr(body, field)
+        if value is not None:
+            updates[field] = value.strip()
+    if body.avatar_b64 is not None:
+        updates["avatar_b64"] = compress_image(body.avatar_b64, max_width=400) if body.avatar_b64 else None
+    if body.cover_b64 is not None:
+        updates["cover_b64"] = compress_image(body.cover_b64, max_width=1000) if body.cover_b64 else None
     if body.preferences is not None:
         updates["preferences"] = body.preferences.model_dump()
     if updates:
@@ -454,6 +609,9 @@ async def create_pairing(body: PairingReq, user: UserDoc = Depends(current_user)
                 category=str(p.get("category", cat)),
                 why=str(p.get("why", "")),
                 tip=str(p.get("tip", "")),
+                flavor_profile=str(p.get("flavor_profile", "")),
+                nutrition_notes=str(p.get("nutrition_notes", "")),
+                alternatives=[str(a) for a in (p.get("alternatives") or [])][:3],
             )
             for p in (data.get("pairings") or [])
             if isinstance(p, dict)
@@ -699,6 +857,552 @@ async def chat_send(body: ChatReq, user: UserDoc = Depends(current_user)):
     )
 
 
+# ---------------------------------------------------------------- Social
+
+
+DEFAULT_COLLECTIONS = ["Favorites", "Want To Cook", "Meal Ideas"]
+
+
+def author_card(doc: Optional[dict]) -> dict:
+    if not doc:
+        return {"id": "", "name": "Unknown cook", "username": "", "avatar_b64": None, "role": "home_cook"}
+    return {
+        "id": str(doc["_id"]),
+        "name": doc.get("name", ""),
+        "username": doc.get("username", ""),
+        "avatar_b64": doc.get("avatar_b64"),
+        "role": doc.get("role", "home_cook"),
+    }
+
+
+async def notify(recipient_id: str, actor: UserDoc, kind: str, message: str, post_id: Optional[str] = None):
+    if recipient_id == actor.id:
+        return
+    await db.notifications.insert_one(
+        NotificationDoc(
+            user_id=recipient_id,
+            actor_id=actor.id,
+            actor_name=actor.name,
+            kind=kind,
+            post_id=post_id,
+            message=message,
+        ).to_mongo()
+    )
+
+
+async def hydrate_posts(docs: List[dict], viewer_id: str) -> List[dict]:
+    """Attaches author, liked/bookmarked flags to raw post documents."""
+    if not docs:
+        return []
+    author_ids = list({d["user_id"] for d in docs})
+    authors = {
+        str(a["_id"]): a
+        for a in await db.users.find({"_id": {"$in": [ObjectId(i) for i in author_ids]}}).to_list(200)
+    }
+    post_ids = [str(d["_id"]) for d in docs]
+    liked = {
+        l["post_id"]
+        for l in await db.likes.find({"user_id": viewer_id, "post_id": {"$in": post_ids}}).to_list(500)
+    }
+    saved: set[str] = set()
+    for col in await db.collections.find({"user_id": viewer_id}).to_list(50):
+        saved.update(col.get("post_ids", []))
+    following = {
+        f["following_id"] for f in await db.follows.find({"follower_id": viewer_id}).to_list(1000)
+    }
+
+    out = []
+    for d in docs:
+        post = PostDoc.from_mongo(d).model_dump()
+        post["author"] = author_card(authors.get(d["user_id"]))
+        post["is_liked"] = post["id"] in liked
+        post["is_bookmarked"] = post["id"] in saved
+        post["is_following_author"] = d["user_id"] in following
+        out.append(post)
+    return out
+
+
+def rank_score(doc: dict, following: set) -> float:
+    created = doc.get("created_at", "")
+    try:
+        age_h = (datetime.now(timezone.utc) - datetime.fromisoformat(created)).total_seconds() / 3600
+    except ValueError:
+        age_h = 72.0
+    engagement = (
+        doc.get("like_count", 0) * 2 + doc.get("comment_count", 0) * 3 + doc.get("bookmark_count", 0) * 2
+    )
+    follow_bonus = 12 if doc.get("user_id") in following else 0
+    freshness = max(0.0, 24.0 - age_h) / 2
+    return engagement + follow_bonus + freshness
+
+
+@api_router.post("/posts")
+async def create_post(body: PostReq, user: UserDoc = Depends(current_user)):
+    kind = body.kind if body.kind in ("photo", "recipe", "pairing") else "photo"
+    images = [compress_image(img, max_width=1080, quality=80) for img in body.images[:4]]
+    if kind == "recipe" and (not body.recipe or not body.recipe.title.strip()):
+        raise HTTPException(status_code=400, detail="A recipe post needs a title")
+    if kind == "photo" and not images and not body.caption.strip():
+        raise HTTPException(status_code=400, detail="Add a photo or a caption")
+
+    tags = [t.strip().lstrip("#").lower() for t in body.hashtags if t.strip()][:8]
+    post = PostDoc(
+        user_id=user.id,
+        kind=kind,
+        caption=body.caption.strip(),
+        hashtags=tags,
+        images=images,
+        recipe=body.recipe if kind == "recipe" else None,
+        pairing_id=body.pairing_id if body.pairing_id and ObjectId.is_valid(body.pairing_id) else None,
+    )
+    res = await db.posts.insert_one(post.to_mongo())
+    post.id = str(res.inserted_id)
+    hydrated = await hydrate_posts([{**post.to_mongo(), "_id": res.inserted_id}], user.id)
+    return hydrated[0]
+
+
+@api_router.get("/feed")
+async def feed(scope: str = "for_you", limit: int = 30, user: UserDoc = Depends(current_user)):
+    following = {f["following_id"] for f in await db.follows.find({"follower_id": user.id}).to_list(1000)}
+    query: dict = {}
+    if scope == "following":
+        query["user_id"] = {"$in": list(following) + [user.id]}
+    docs = await db.posts.find(query).sort("created_at", -1).to_list(200)
+    docs.sort(key=lambda d: rank_score(d, following), reverse=True)
+    return await hydrate_posts(docs[:limit], user.id)
+
+
+@api_router.get("/posts/{post_id}")
+async def get_post(post_id: str, user: UserDoc = Depends(current_user)):
+    if not ObjectId.is_valid(post_id):
+        raise HTTPException(status_code=404, detail="Post not found")
+    doc = await db.posts.find_one({"_id": ObjectId(post_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return (await hydrate_posts([doc], user.id))[0]
+
+
+@api_router.delete("/posts/{post_id}")
+async def delete_post(post_id: str, user: UserDoc = Depends(current_user)):
+    if not ObjectId.is_valid(post_id):
+        raise HTTPException(status_code=404, detail="Post not found")
+    res = await db.posts.delete_one({"_id": ObjectId(post_id), "user_id": user.id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Post not found")
+    await db.likes.delete_many({"post_id": post_id})
+    await db.comments.delete_many({"post_id": post_id})
+    return {"deleted": True}
+
+
+@api_router.post("/posts/{post_id}/like")
+async def toggle_like(post_id: str, user: UserDoc = Depends(current_user)):
+    if not ObjectId.is_valid(post_id):
+        raise HTTPException(status_code=404, detail="Post not found")
+    doc = await db.posts.find_one({"_id": ObjectId(post_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Post not found")
+    existing = await db.likes.find_one({"post_id": post_id, "user_id": user.id})
+    if existing:
+        await db.likes.delete_one({"_id": existing["_id"]})
+        delta = -1
+    else:
+        await db.likes.insert_one(
+            {
+                "post_id": post_id,
+                "user_id": user.id,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        delta = 1
+        await notify(doc["user_id"], user, "like", f"{user.name} liked your post", post_id)
+    await db.posts.update_one({"_id": ObjectId(post_id)}, {"$inc": {"like_count": delta}})
+    fresh = await db.posts.find_one({"_id": ObjectId(post_id)})
+    return {"is_liked": delta > 0, "like_count": max(0, fresh.get("like_count", 0))}
+
+
+@api_router.get("/posts/{post_id}/comments")
+async def list_comments(post_id: str, user: UserDoc = Depends(current_user)):
+    docs = await db.comments.find({"post_id": post_id}).sort("created_at", 1).to_list(300)
+    authors = {
+        str(a["_id"]): a
+        for a in await db.users.find(
+            {"_id": {"$in": [ObjectId(d["user_id"]) for d in docs]}}
+        ).to_list(300)
+    }
+    out = []
+    for d in docs:
+        c = CommentDoc.from_mongo(d).model_dump()
+        c["author"] = author_card(authors.get(d["user_id"]))
+        out.append(c)
+    return out
+
+
+@api_router.post("/posts/{post_id}/comments")
+async def add_comment(post_id: str, body: CommentReq, user: UserDoc = Depends(current_user)):
+    if not ObjectId.is_valid(post_id):
+        raise HTTPException(status_code=404, detail="Post not found")
+    post = await db.posts.find_one({"_id": ObjectId(post_id)})
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    comment = CommentDoc(
+        post_id=post_id,
+        user_id=user.id,
+        parent_id=body.parent_id if body.parent_id and ObjectId.is_valid(body.parent_id) else None,
+        content=body.content.strip(),
+    )
+    res = await db.comments.insert_one(comment.to_mongo())
+    comment.id = str(res.inserted_id)
+    await db.posts.update_one({"_id": ObjectId(post_id)}, {"$inc": {"comment_count": 1}})
+    kind = "reply" if comment.parent_id else "comment"
+    await notify(post["user_id"], user, kind, f"{user.name} {kind}d on your post", post_id)
+    data = comment.model_dump()
+    data["author"] = author_card(await db.users.find_one({"_id": ObjectId(user.id)}))
+    return data
+
+
+@api_router.delete("/comments/{comment_id}")
+async def delete_comment(comment_id: str, user: UserDoc = Depends(current_user)):
+    if not ObjectId.is_valid(comment_id):
+        raise HTTPException(status_code=404, detail="Comment not found")
+    doc = await db.comments.find_one({"_id": ObjectId(comment_id), "user_id": user.id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    await db.comments.delete_one({"_id": ObjectId(comment_id)})
+    await db.posts.update_one({"_id": ObjectId(doc["post_id"])}, {"$inc": {"comment_count": -1}})
+    return {"deleted": True}
+
+
+# ------------------------------------------------- Collections & bookmarks
+
+
+async def ensure_collections(user_id: str) -> List[dict]:
+    existing = await db.collections.find({"user_id": user_id}).to_list(50)
+    have = {c["name"] for c in existing}
+    for name in DEFAULT_COLLECTIONS:
+        if name not in have:
+            doc = CollectionDoc(user_id=user_id, name=name).to_mongo()
+            res = await db.collections.insert_one(doc)
+            existing.append({**doc, "_id": res.inserted_id})
+    return existing
+
+
+@api_router.get("/collections")
+async def list_collections(user: UserDoc = Depends(current_user)):
+    docs = await ensure_collections(user.id)
+    return [
+        {**CollectionDoc.from_mongo(d).model_dump(), "count": len(d.get("post_ids", []))} for d in docs
+    ]
+
+
+@api_router.post("/collections")
+async def create_collection(body: CollectionReq, user: UserDoc = Depends(current_user)):
+    name = body.name.strip()[:40]
+    if await db.collections.find_one({"user_id": user.id, "name": name}):
+        raise HTTPException(status_code=400, detail="You already have a collection with that name")
+    doc = CollectionDoc(user_id=user.id, name=name)
+    res = await db.collections.insert_one(doc.to_mongo())
+    doc.id = str(res.inserted_id)
+    return {**doc.model_dump(), "count": 0}
+
+
+@api_router.get("/collections/{collection_id}/posts")
+async def collection_posts(collection_id: str, user: UserDoc = Depends(current_user)):
+    if not ObjectId.is_valid(collection_id):
+        raise HTTPException(status_code=404, detail="Collection not found")
+    col = await db.collections.find_one({"_id": ObjectId(collection_id), "user_id": user.id})
+    if not col:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    ids = [ObjectId(i) for i in col.get("post_ids", []) if ObjectId.is_valid(i)]
+    docs = await db.posts.find({"_id": {"$in": ids}}).sort("created_at", -1).to_list(200)
+    return await hydrate_posts(docs, user.id)
+
+
+@api_router.post("/posts/{post_id}/bookmark")
+async def toggle_bookmark(post_id: str, body: BookmarkReq, user: UserDoc = Depends(current_user)):
+    if not ObjectId.is_valid(post_id):
+        raise HTTPException(status_code=404, detail="Post not found")
+    post = await db.posts.find_one({"_id": ObjectId(post_id)})
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    await ensure_collections(user.id)
+    col = await db.collections.find_one({"user_id": user.id, "name": body.collection_name}) or (
+        await db.collections.find_one({"user_id": user.id, "name": "Favorites"})
+    )
+    saved_ids = col.get("post_ids", [])
+    if post_id in saved_ids:
+        await db.collections.update_one({"_id": col["_id"]}, {"$pull": {"post_ids": post_id}})
+        await db.posts.update_one({"_id": ObjectId(post_id)}, {"$inc": {"bookmark_count": -1}})
+        return {"is_bookmarked": False, "collection": col["name"]}
+    await db.collections.update_one({"_id": col["_id"]}, {"$addToSet": {"post_ids": post_id}})
+    await db.posts.update_one({"_id": ObjectId(post_id)}, {"$inc": {"bookmark_count": 1}})
+    await notify(post["user_id"], user, "bookmark", f"{user.name} saved your post", post_id)
+    return {"is_bookmarked": True, "collection": col["name"]}
+
+
+# ------------------------------------------------- Follows & public profiles
+
+
+@api_router.post("/users/{target_id}/follow")
+async def toggle_follow(target_id: str, user: UserDoc = Depends(current_user)):
+    if target_id == user.id:
+        raise HTTPException(status_code=400, detail="You cannot follow yourself")
+    if not ObjectId.is_valid(target_id) or not await db.users.find_one({"_id": ObjectId(target_id)}):
+        raise HTTPException(status_code=404, detail="User not found")
+    existing = await db.follows.find_one({"follower_id": user.id, "following_id": target_id})
+    if existing:
+        await db.follows.delete_one({"_id": existing["_id"]})
+        return {"is_following": False}
+    await db.follows.insert_one(
+        {
+            "follower_id": user.id,
+            "following_id": target_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    await notify(target_id, user, "follow", f"{user.name} started following you")
+    return {"is_following": True}
+
+
+@api_router.get("/users/{target_id}")
+async def public_profile(target_id: str, user: UserDoc = Depends(current_user)):
+    if not ObjectId.is_valid(target_id):
+        raise HTTPException(status_code=404, detail="User not found")
+    doc = await db.users.find_one({"_id": ObjectId(target_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    target = UserDoc.from_mongo(doc)
+    posts = await db.posts.find({"user_id": target_id}).sort("created_at", -1).to_list(60)
+    followers, following, is_following = await asyncio.gather(
+        db.follows.count_documents({"following_id": target_id}),
+        db.follows.count_documents({"follower_id": target_id}),
+        db.follows.find_one({"follower_id": user.id, "following_id": target_id}),
+    )
+    return {
+        **public_user(target),
+        "email": None if target_id != user.id else target.email,
+        "followers_count": followers,
+        "following_count": following,
+        "recipe_count": sum(1 for p in posts if p.get("kind") == "recipe"),
+        "post_count": len(posts),
+        "is_following": bool(is_following),
+        "is_self": target_id == user.id,
+        "posts": await hydrate_posts(posts, user.id),
+    }
+
+
+@api_router.get("/users/{target_id}/followers")
+async def followers_list(target_id: str, user: UserDoc = Depends(current_user)):
+    rows = await db.follows.find({"following_id": target_id}).to_list(500)
+    ids = [ObjectId(r["follower_id"]) for r in rows if ObjectId.is_valid(r["follower_id"])]
+    docs = await db.users.find({"_id": {"$in": ids}}).to_list(500)
+    return [author_card(d) for d in docs]
+
+
+@api_router.get("/users/{target_id}/following")
+async def following_list(target_id: str, user: UserDoc = Depends(current_user)):
+    rows = await db.follows.find({"follower_id": target_id}).to_list(500)
+    ids = [ObjectId(r["following_id"]) for r in rows if ObjectId.is_valid(r["following_id"])]
+    docs = await db.users.find({"_id": {"$in": ids}}).to_list(500)
+    return [author_card(d) for d in docs]
+
+
+@api_router.get("/me/liked")
+async def my_liked_posts(user: UserDoc = Depends(current_user)):
+    rows = await db.likes.find({"user_id": user.id}).sort("created_at", -1).to_list(200)
+    ids = [ObjectId(r["post_id"]) for r in rows if ObjectId.is_valid(r["post_id"])]
+    docs = await db.posts.find({"_id": {"$in": ids}}).to_list(200)
+    return await hydrate_posts(docs, user.id)
+
+
+# ------------------------------------------------- Search
+
+
+@api_router.get("/search")
+async def search(
+    q: str = "",
+    type: str = "all",
+    cuisine: str = "",
+    difficulty: str = "",
+    diet: str = "",
+    max_time: int = 0,
+    max_calories: int = 0,
+    sort: str = "latest",
+    user: UserDoc = Depends(current_user),
+):
+    term = q.strip()
+    rx = {"$regex": re.escape(term), "$options": "i"} if term else None
+
+    users_out: List[dict] = []
+    if type in ("all", "users") and term:
+        udocs = await db.users.find(
+            {"$or": [{"name": rx}, {"username": rx}, {"favorite_cuisine": rx}]}
+        ).to_list(20)
+        users_out = [author_card(d) for d in udocs]
+
+    posts_out: List[dict] = []
+    if type in ("all", "posts", "recipes"):
+        pq: dict = {}
+        conds: List[dict] = []
+        if term:
+            conds.append(
+                {
+                    "$or": [
+                        {"caption": rx},
+                        {"hashtags": rx},
+                        {"recipe.title": rx},
+                        {"recipe.description": rx},
+                        {"recipe.ingredients": rx},
+                        {"recipe.cuisine": rx},
+                    ]
+                }
+            )
+        if type == "recipes":
+            conds.append({"kind": "recipe"})
+        if cuisine:
+            conds.append({"recipe.cuisine": {"$regex": re.escape(cuisine), "$options": "i"}})
+        if difficulty:
+            conds.append({"recipe.difficulty": difficulty})
+        if diet:
+            conds.append({"recipe.diet": {"$regex": re.escape(diet), "$options": "i"}})
+        if conds:
+            pq["$and"] = conds
+        docs = await db.posts.find(pq).sort("created_at", -1).to_list(200)
+        if max_time:
+            docs = [
+                d
+                for d in docs
+                if not d.get("recipe")
+                or (d["recipe"].get("prep_time_min", 0) + d["recipe"].get("cook_time_min", 0)) <= max_time
+            ]
+        if max_calories:
+            def cal(d: dict) -> int:
+                try:
+                    return int(re.sub(r"\D", "", str((d.get("recipe") or {}).get("nutrition", {}).get("calories", "")) ) or 0)
+                except ValueError:
+                    return 0
+
+            docs = [d for d in docs if not d.get("recipe") or cal(d) == 0 or cal(d) <= max_calories]
+        if sort == "likes":
+            docs.sort(key=lambda d: d.get("like_count", 0), reverse=True)
+        elif sort == "saves":
+            docs.sort(key=lambda d: d.get("bookmark_count", 0), reverse=True)
+        elif sort == "trending":
+            docs.sort(key=lambda d: rank_score(d, set()), reverse=True)
+        posts_out = await hydrate_posts(docs[:40], user.id)
+
+    pairings_out: List[dict] = []
+    if type in ("all", "pairings") and term:
+        pdocs = (
+            await db.pairings.find({"user_id": user.id, "query": rx}, {"image_b64": 0})
+            .sort("created_at", -1)
+            .to_list(20)
+        )
+        pairings_out = [PairingDoc.from_mongo(d).model_dump() for d in pdocs]
+
+    return {"users": users_out, "posts": posts_out, "pairings": pairings_out}
+
+
+# ------------------------------------------------- Notifications (in-app)
+
+
+@api_router.get("/notifications")
+async def list_notifications(user: UserDoc = Depends(current_user)):
+    docs = await db.notifications.find({"user_id": user.id}).sort("created_at", -1).to_list(100)
+    return [NotificationDoc.from_mongo(d).model_dump() for d in docs]
+
+
+@api_router.post("/notifications/read")
+async def mark_notifications_read(user: UserDoc = Depends(current_user)):
+    await db.notifications.update_many({"user_id": user.id, "read": False}, {"$set": {"read": True}})
+    return {"read": True}
+
+
+# ------------------------------------------------- AI recipe generator
+
+
+RECIPE_SCHEMA = """Respond with ONLY valid minified JSON, no markdown fences, matching:
+{"title":"...","description":"1-2 sentences","cuisine":"...","difficulty":"Beginner|Intermediate|Advanced","prep_time_min":10,"cook_time_min":25,"servings":2,"ingredients":["200g item — note"],"instructions":["step 1","step 2"],"nutrition":{"calories":"520 kcal","protein":"32 g","carbs":"48 g","fat":"18 g"},"tags":["weeknight","one-pan"],"shopping_list":["item to buy"],"drink_pairing":"...","dessert_pairing":"...","ingredient_alternatives":["swap X for Y"]}
+Return 5-12 ingredients and 4-8 instruction steps."""
+
+
+@api_router.post("/recipes/generate")
+async def generate_recipe(body: RecipeGenReq, user: UserDoc = Depends(current_user)):
+    await ensure_quota(user)
+    ingredients = [i.strip() for i in body.ingredients if i.strip()]
+    if not ingredients and not body.goal.strip():
+        raise HTTPException(status_code=400, detail="Add some ingredients or a goal")
+
+    prefs = user.preferences
+    tone = (
+        "You are Pairly, a culinary R&D consultant writing for a professional chef."
+        if user.role == "chef"
+        else "You are Pairly, a friendly recipe developer writing for a home cook."
+    )
+    system = (
+        f"{tone} Be precise about quantities and timings. Respect the user's diet: {body.diet or prefs.diet}. "
+        f"Avoid: {prefs.avoid or 'nothing'}.\n{RECIPE_SCHEMA}"
+    )
+    prompt = "\n".join(
+        filter(
+            None,
+            [
+                f"Ingredients on hand: {', '.join(ingredients)}." if ingredients else "",
+                f"Cuisine: {body.cuisine}." if body.cuisine else "",
+                f"Diet: {body.diet}." if body.diet else "",
+                f"Budget: {body.budget}." if body.budget else "",
+                f"Total cooking time target: {body.cooking_time}." if body.cooking_time else "",
+                f"Difficulty: {body.difficulty}." if body.difficulty else "",
+                f"Calorie target per serving: {body.calories}." if body.calories else "",
+                f"Goal: {body.goal}." if body.goal else "",
+                "Create one complete recipe that uses as many of the listed ingredients as possible.",
+            ],
+        )
+    )
+    data, model_used = await run_llm(system, prompt, f"recipe-{user.id}")
+    nut = data.get("nutrition") or {}
+    recipe = RecipeData(
+        title=str(data.get("title", "Generated recipe"))[:120],
+        description=str(data.get("description", "")),
+        cuisine=str(data.get("cuisine", body.cuisine)),
+        difficulty=str(data.get("difficulty", body.difficulty or "Beginner")),
+        prep_time_min=int(data.get("prep_time_min") or 0),
+        cook_time_min=int(data.get("cook_time_min") or 0),
+        servings=int(data.get("servings") or 2),
+        ingredients=[str(i) for i in (data.get("ingredients") or [])],
+        instructions=[str(i) for i in (data.get("instructions") or [])],
+        nutrition=Nutrition(
+            calories=str(nut.get("calories", "")),
+            protein=str(nut.get("protein", "")),
+            carbs=str(nut.get("carbs", "")),
+            fat=str(nut.get("fat", "")),
+        ),
+        tags=[str(t) for t in (data.get("tags") or [])],
+        diet=body.diet,
+        shopping_list=[str(s) for s in (data.get("shopping_list") or [])],
+        drink_pairing=str(data.get("drink_pairing", "")),
+        dessert_pairing=str(data.get("dessert_pairing", "")),
+        ingredient_alternatives=[str(a) for a in (data.get("ingredient_alternatives") or [])],
+    )
+    saved = {
+        "user_id": user.id,
+        "recipe": recipe.model_dump(),
+        "inputs": body.model_dump(),
+        "model_used": model_used,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    res = await db.ai_recipes.insert_one(saved)
+    return {"id": str(res.inserted_id), "recipe": recipe.model_dump()}
+
+
+@api_router.get("/recipes/generated")
+async def list_generated_recipes(user: UserDoc = Depends(current_user)):
+    docs = await db.ai_recipes.find({"user_id": user.id}).sort("created_at", -1).to_list(50)
+    return [
+        {"id": str(d["_id"]), "recipe": d.get("recipe", {}), "created_at": d.get("created_at", "")}
+        for d in docs
+    ]
+
+
 # ---------------------------------------------------------------- PayPal
 
 PAYPAL_CONFIGURED = bool(PAYPAL_CLIENT_ID and PAYPAL_SECRET)
@@ -807,7 +1511,14 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     await db.users.create_index("email", unique=True)
+    await db.users.create_index("username")
     await db.pairings.create_index([("user_id", 1), ("created_at", -1)])
+    await db.posts.create_index([("created_at", -1)])
+    await db.posts.create_index("user_id")
+    await db.likes.create_index([("post_id", 1), ("user_id", 1)], unique=True)
+    await db.comments.create_index([("post_id", 1), ("created_at", 1)])
+    await db.follows.create_index([("follower_id", 1), ("following_id", 1)], unique=True)
+    await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
     logger.info("Pairly API ready. PayPal configured: %s", PAYPAL_CONFIGURED)
 
 

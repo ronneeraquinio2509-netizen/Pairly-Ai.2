@@ -67,6 +67,14 @@ export default function SavedScreen() {
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+        <Pressable
+          testID="saved-back-button"
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          hitSlop={8}
+        >
+          <Feather name="arrow-left" size={20} color={colors.onSurface} />
+        </Pressable>
         <Text style={styles.kicker}>YOUR ARCHIVE</Text>
         <Text style={styles.title}>Saved pairings</Text>
         <CategoryChips categories={FILTERS} value={filter} onChange={setFilter} testIDPrefix="saved-filter" />
@@ -157,6 +165,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     paddingHorizontal: spacing.lg,
   },
+  backBtn: { width: 44, height: 40, marginLeft: spacing.sm, justifyContent: "center" },
   title: {
     fontFamily: fonts.display,
     fontSize: 28,

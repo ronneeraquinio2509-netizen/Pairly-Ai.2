@@ -187,7 +187,25 @@ export default function PairingDetail() {
                 </View>
                 {open ? (
                   <View style={styles.itemBody}>
+                    {item.flavor_profile ? (
+                      <Text style={styles.flavor}>{item.flavor_profile}</Text>
+                    ) : null}
                     <Text style={styles.why}>{item.why}</Text>
+                    {item.nutrition_notes ? (
+                      <View style={styles.nutrition}>
+                        <Feather name="activity" size={12} color={colors.success} />
+                        <Text style={styles.nutritionText}>{item.nutrition_notes}</Text>
+                      </View>
+                    ) : null}
+                    {item.alternatives && item.alternatives.length > 0 ? (
+                      <View style={styles.altWrap}>
+                        {item.alternatives.map((alt) => (
+                          <View key={alt} style={styles.alt}>
+                            <Text style={styles.altText}>{alt}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
                     {item.tip ? (
                       <View style={styles.tip}>
                         <Feather name="zap" size={12} color={colors.brand} />
@@ -319,6 +337,25 @@ const styles = StyleSheet.create({
   },
   itemBody: { paddingTop: spacing.md, paddingLeft: spacing.xl + spacing.xs },
   why: { fontFamily: fonts.text, fontSize: type.base, lineHeight: 22, color: colors.onSurface },
+  flavor: {
+    fontFamily: fonts.text,
+    fontSize: type.sm,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: colors.brand,
+    fontWeight: "700",
+    marginBottom: spacing.xs,
+  },
+  nutrition: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, marginTop: spacing.sm },
+  nutritionText: { flex: 1, fontFamily: fonts.text, fontSize: type.sm, color: colors.success, lineHeight: 18 },
+  altWrap: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.sm },
+  alt: {
+    backgroundColor: colors.surfaceTertiary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+  },
+  altText: { fontFamily: fonts.text, fontSize: type.sm, color: colors.muted },
   tip: {
     flexDirection: "row",
     alignItems: "flex-start",

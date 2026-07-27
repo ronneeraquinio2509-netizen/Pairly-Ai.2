@@ -1,8 +1,9 @@
 import Feather from "@expo/vector-icons/Feather";
+import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { captureRef } from "react-native-view-shot";
 
@@ -11,7 +12,7 @@ import { useToast } from "@/src/components/toast";
 import { PairingShareCard } from "@/src/components/pairing-share-card";
 import { ErrorState, Skeleton } from "@/src/components/ui";
 import { pairingToText, shareToWhatsApp } from "@/src/share";
-import { colors, fonts, radius, spacing, type } from "@/src/theme";
+import { categoryImage, colors, fonts, radius, spacing, type } from "@/src/theme";
 
 export default function PairingDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -23,12 +24,25 @@ export default function PairingDetail() {
   const [error, setError] = useState("");
   const [openIdx, setOpenIdx] = useState<number | null>(0);
   const [sharingCard, setSharingCard] = useState(false);
+  const [image, setImage] = useState<string | null>(null);
+  const [imageLoading, setImageLoading] = useState(false);
   const cardRef = useRef<View>(null);
 
   const load = useCallback(async () => {
     setError("");
     try {
-      setPairing(await api.pairing(String(id)));
+      const data = await api.pairing(String(id));
+      setPairing(data);
+      if (data.image_b64) {
+        setImage(data.image_b64);
+      } else {
+        setImageLoading(true);
+        api
+          .pairingImage(data.id)
+          .then((res) => setImage(res.image_b64))
+          .catch(() => undefined)
+          .finally(() => setImageLoading(false));
+      }
     } catch {
       setError("We couldn't fetch this pairing right now.");
     }
@@ -121,6 +135,23 @@ export default function PairingDetail() {
           testID="pairing-detail-scroll"
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + spacing.xxl }]}
         >
+          <View testID="pairing-hero-image" style={styles.hero}>
+            <Image
+              source={{
+                uri: image ? `data:image/jpeg;base64,${image}` : categoryImage(pairing.category),
+              }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              transition={300}
+            />
+            {!image && imageLoading ? (
+              <View style={styles.heroOverlay}>
+                <ActivityIndicator color={colors.onSurfaceInverse} size="small" />
+                <Text style={styles.heroOverlayText}>Plating your photo…</Text>
+              </View>
+            ) : null}
+          </View>
+
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{pairing.category.toUpperCase()} PAIRINGS</Text>
           </View>
@@ -200,7 +231,11 @@ export default function PairingDetail() {
           </Pressable>
 
           <View style={styles.offscreen}>
-            <PairingShareCard ref={cardRef} pairing={pairing} />
+            <PairingShareCard
+              ref={cardRef}
+              pairing={pairing}
+              imageUri={image ? `data:image/jpeg;base64,${image}` : undefined}
+            />
           </View>
         </ScrollView>
       )}
@@ -229,6 +264,21 @@ const styles = StyleSheet.create({
     color: colors.onSurface,
   },
   scroll: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl },
+  hero: {
+    height: 200,
+    borderRadius: radius.lg,
+    overflow: "hidden",
+    backgroundColor: colors.surfaceTertiary,
+    marginBottom: spacing.lg,
+  },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(31,30,29,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+  },
+  heroOverlayText: { fontFamily: fonts.text, fontSize: type.sm, color: colors.onSurfaceInverse },
   badge: {
     alignSelf: "flex-start",
     backgroundColor: colors.brandTertiary,

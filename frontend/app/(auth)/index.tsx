@@ -81,7 +81,7 @@ export default function AuthScreen() {
         <View style={[styles.heroContent, { paddingTop: insets.top + spacing.xl }]}>
           <View style={styles.brandRow}>
             <Feather name="git-merge" size={18} color={colors.brandSecondary} />
-            <Text style={styles.brandName}>PAIRLY AI</Text>
+            <Text style={styles.brandName}>PAIRLY</Text>
           </View>
           <Text style={styles.heroTitle}>What goes{"\n"}with what.</Text>
           <Text style={styles.heroSub}>

@@ -37,7 +37,15 @@ export type Pairing = {
   pairings: PairingItem[];
   mini_recipe_title: string;
   mini_recipe_steps: string[];
+  image_b64?: string | null;
   is_favorite: boolean;
+  created_at: string;
+};
+
+export type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
   created_at: string;
 };
 
@@ -106,6 +114,10 @@ export const api = {
   pairings: (favoritesOnly = false) =>
     request<Pairing[]>(`/pairings?favorites_only=${favoritesOnly}`),
   pairing: (id: string) => request<Pairing>(`/pairings/${id}`),
+  pairingImage: (id: string) =>
+    request<{ image_b64: string }>(`/pairings/${id}/image`, { method: "POST" }),
+  chatHistory: () => request<ChatMessage[]>("/chat/messages"),
+  clearChat: () => request<{ cleared: boolean }>("/chat/messages", { method: "DELETE" }),
   toggleFavorite: (id: string) =>
     request<{ id: string; is_favorite: boolean }>(`/pairings/${id}/favorite`, { method: "POST" }),
   deletePairing: (id: string) => request<{ deleted: boolean }>(`/pairings/${id}`, { method: "DELETE" }),

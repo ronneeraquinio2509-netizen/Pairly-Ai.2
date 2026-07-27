@@ -5,7 +5,7 @@ import { forwardRef } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Pairing } from "@/src/api";
-import { colors, fonts, images, radius, spacing, type } from "@/src/theme";
+import { categoryImage, colors, fonts, radius, spacing, type } from "@/src/theme";
 
 const CARD_WIDTH = 340;
 
@@ -13,15 +13,17 @@ const CARD_WIDTH = 340;
  * Off-screen branded card captured with react-native-view-shot and shared as an image.
  * Fixed width so the exported PNG looks identical on every device.
  */
-export const PairingShareCard = forwardRef<View, { pairing: Pairing }>(function PairingShareCard(
-  { pairing },
-  ref,
-) {
-  const top = pairing.pairings.slice(0, 3);
-  return (
-    <View ref={ref} collapsable={false} style={styles.card}>
-      <View style={styles.hero}>
-        <Image source={{ uri: images.wine }} style={StyleSheet.absoluteFill} contentFit="cover" />
+export const PairingShareCard = forwardRef<View, { pairing: Pairing; imageUri?: string }>(
+  function PairingShareCard({ pairing, imageUri }, ref) {
+    const top = pairing.pairings.slice(0, 3);
+    return (
+      <View ref={ref} collapsable={false} style={styles.card}>
+        <View style={styles.hero}>
+          <Image
+            source={{ uri: imageUri ?? categoryImage(pairing.category) }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+          />
         <LinearGradient
           colors={["rgba(31,30,29,0.35)", "rgba(31,30,29,0.92)"]}
           style={StyleSheet.absoluteFill}
@@ -29,7 +31,7 @@ export const PairingShareCard = forwardRef<View, { pairing: Pairing }>(function 
         <View style={styles.heroText}>
           <View style={styles.brandRow}>
             <Feather name="git-merge" size={12} color={colors.brandSecondary} />
-            <Text style={styles.brand}>PAIRLY AI</Text>
+            <Text style={styles.brand}>PAIRLY</Text>
           </View>
           <Text style={styles.query} numberOfLines={2}>
             {pairing.query}
@@ -62,7 +64,7 @@ export const PairingShareCard = forwardRef<View, { pairing: Pairing }>(function 
           </View>
         ) : null}
 
-        <Text style={styles.footer}>Paired with Pairly AI</Text>
+        <Text style={styles.footer}>Paired with Pairly</Text>
       </View>
     </View>
   );

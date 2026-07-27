@@ -1,4 +1,5 @@
 import Feather from "@expo/vector-icons/Feather";
+import { Image } from "expo-image";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -9,7 +10,7 @@ import { ApiError, api, Pairing, Usage } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { useToast } from "@/src/components/toast";
 import { CategoryChips, PrimaryButton, Skeleton } from "@/src/components/ui";
-import { CATEGORIES, colors, fonts, radius, spacing, type } from "@/src/theme";
+import { CATEGORIES, categoryImage, colors, fonts, radius, spacing, type } from "@/src/theme";
 
 const PLACEHOLDERS: Record<string, string> = {
   ingredient: "e.g. smoked paprika, miso, figs",
@@ -160,13 +161,12 @@ export default function PairScreen() {
               onPress={() => router.push(`/pairing/${p.id}`)}
               style={({ pressed }) => [styles.recentRow, pressed && { opacity: 0.6 }]}
             >
-              <View style={styles.recentIcon}>
-                <Feather
-                  name={CATEGORIES.find((c) => c.key === p.category)?.icon ?? "package"}
-                  size={15}
-                  color={colors.brand}
-                />
-              </View>
+              <Image
+                source={{ uri: categoryImage(p.category) }}
+                style={styles.recentThumb}
+                contentFit="cover"
+                transition={200}
+              />
               <View style={{ flex: 1 }}>
                 <Text style={styles.recentTitle} numberOfLines={1}>
                   {p.query}
@@ -292,6 +292,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandTertiary,
     alignItems: "center",
     justifyContent: "center",
+  },
+  recentThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceTertiary,
   },
   recentTitle: { fontFamily: fonts.display, fontSize: type.lg, color: colors.onSurface },
   recentSub: { fontFamily: fonts.text, fontSize: type.sm, color: colors.muted, marginTop: 2 },

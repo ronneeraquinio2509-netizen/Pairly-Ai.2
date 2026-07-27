@@ -56,3 +56,16 @@ export const CATEGORIES = [
   { key: "dish", label: "Dish", icon: "coffee" as const },
   { key: "beverage", label: "Beverage", icon: "droplet" as const },
 ];
+
+/** Editorial fallback photography used in lists and while a hero image is generating. */
+export const categoryImages: Record<string, string> = {
+  ingredient:
+    "https://images.unsplash.com/photo-1466637574441-749b8f19452f?crop=entropy&cs=srgb&fm=jpg&w=600&q=80",
+  dish: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?crop=entropy&cs=srgb&fm=jpg&w=600&q=80",
+  beverage:
+    "https://images.unsplash.com/photo-1470337458703-46ad1756a187?crop=entropy&cs=srgb&fm=jpg&w=600&q=80",
+};
+
+export function categoryImage(category: string): string {
+  return categoryImages[category] ?? categoryImages.ingredient;
+}

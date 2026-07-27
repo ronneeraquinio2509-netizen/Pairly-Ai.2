@@ -1,4 +1,5 @@
 import Feather from "@expo/vector-icons/Feather";
+import { Image } from "expo-image";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
@@ -8,7 +9,7 @@ import { api, Pairing } from "@/src/api";
 import { useToast } from "@/src/components/toast";
 import { CategoryChips, EmptyState, ErrorState, Skeleton } from "@/src/components/ui";
 import { shareToWhatsApp, pairingToText } from "@/src/share";
-import { CATEGORIES, colors, fonts, images, radius, spacing, type } from "@/src/theme";
+import { CATEGORIES, categoryImage, colors, fonts, images, radius, spacing, type } from "@/src/theme";
 
 const FILTERS = [{ key: "all", label: "All", icon: "grid" as const }, ...CATEGORIES];
 
@@ -99,6 +100,12 @@ export default function SavedScreen() {
               onPress={() => router.push(`/pairing/${item.id}`)}
               style={({ pressed }) => [styles.card, pressed && { opacity: 0.7 }]}
             >
+              <Image
+                source={{ uri: categoryImage(item.category) }}
+                style={styles.cardImage}
+                contentFit="cover"
+                transition={220}
+              />
               <View style={styles.cardTop}>
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>{item.category.toUpperCase()}</Text>
@@ -164,6 +171,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: spacing.lg,
     marginTop: spacing.lg,
+  },
+  cardImage: {
+    height: 132,
+    borderRadius: radius.sm,
+    marginBottom: spacing.md,
+    backgroundColor: colors.surfaceTertiary,
   },
   cardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.md },
   badge: {

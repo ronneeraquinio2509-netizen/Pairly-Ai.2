@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 3 (both). Backend: 11/11 new-feature tests passing plus prior 20/20 regression suite still valid — image gen returns a JPEG base64 in ~15-40s and is cached (2nd call <1s, same bytes), GET /api/pairings and /api/pairings?favorites_only=true correctly project image_b64 OUT, GET /api/pairings/{id} returns it, cross-user access is 404 for both detail and image, chat is text/event-stream with data:{delta}… chunks then data:{done:true}, GET /api/chat/messages persists user+assistant in order, DELETE /api/chat/messages clears, unauth POST /api/chat = 401, and quota regression confirms /usage counts pairings+menus+chat user-messages — at 5/5 both POST /api/pairings and POST /api/chat return 402 (menus too). Rename: API root message contains 'Pairly'. Frontend (mobile 390x844, Expo web preview): PAIRLY brand on auth hero, no 'Pairly AI' string anywhere; Ask tab present in bottom tab bar between Pair and Saved; chat-empty-state + chat-starter-0..3 + chat-input + chat-send-button + chat-clear-button all present and functional; sending 'Say hi in 3 words only' streamed 'Hey, Chef. Ready.' into chat-bubble-assistant; history persisted across tab switch (17 chars retained); clear returned empty state. Pairing detail: pairing-hero-image testID present, 'Plating your photo…' overlay shown during generation, JPEG base64 rendered on completion; Recent-searches rows on the Pair tab show photo thumbnails (cold brew coffee, carbonara, smoked paprika). Deprecated packages detected: none (no expo-av, expo-barcode-scanner, expo-background-fetch in use). React Native warning still open from iteration 2: `props.pointerEvents is deprecated` — the fix flagged last iteration was not applied.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "PairingDetail off-screen wrapper", "issue": "Deprecation warning still emitted: `props.pointerEvents is deprecated. Use style.pointerEvents`. Reference: /app/frontend/app/pairing/[id].tsx (off-screen share-card wrapper) — move pointerEvents:'none' into the style object. Was already reported in iteration_2.json but not yet fixed."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_pairly_new_features.py",
+    "/app/backend/tests/test_pairly_backend.py",
+    "/app/test_reports/pytest/iter3_new.xml"
+  ],
+  "action_items": [
+    "(Cosmetic, carried from iter2) In /app/frontend/app/pairing/[id].tsx, migrate the off-screen wrapper `<View style={styles.offscreen} pointerEvents=\"none\">` to include `pointerEvents:'none'` inside the style object to silence the RN Web deprecation warning."
+  ],
+  "critical_code_review_comments": [
+    "server.py is ~815 lines — still under the 700-line soft limit is exceeded; consider splitting AI (LLM + image gen), chat streaming and PayPal handlers into their own modules for maintainability. Not blocking.",
+    "generate_food_image() session_id uses `abs(hash(subject)) % 10**8` — Python hash randomisation makes this non-stable across processes; fine because the DB `image_b64` cache is authoritative, but a stable hash (hashlib) would let LLM providers dedupe as well.",
+    "chat_send streams the assistant reply but the persistence only happens after the stream closes. If the client disconnects mid-stream, the assistant message is lost while the user message is already saved — leaves a lopsided history. Consider persisting incrementally or on cancel.",
+    "used_today() uses `{'$regex': '^YYYY-MM-DD'}` on the created_at ISO string — works, but a proper date-range query on an indexed field would be faster once volume grows. Non-blocking.",
+    "compress_image swallows failures and returns the raw PNG b64 — good defensive behaviour."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_pairly_new_features.py (new)"
+  ],
+  "success_rate": {"backend": "100% (11/11 new tests; prior 20/20 unchanged)", "frontend": "100% on the tested flows (chat send/stream/persist/clear, pairing hero image + overlay, thumbnails, rename)"},
+  "seed_data_creation": "Ephemeral: TEST_quota_* and TEST_pay_* users + a seeded 'seared scallops' pairing for chef@pairly.app; all cleaned up in test teardown. Chat history for cook@pairly.app was created and then cleared by the test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "chef@pairly.app / Pairly123! and cook@pairly.app / Pairly123! exist. Iteration 3 verified: image gen + cache + list projection, streaming chat + persistence + clear, quota regression across pairings+menus+chat, rename. The only outstanding item is a cosmetic RN Web deprecation warning for `props.pointerEvents` on the off-screen share-card wrapper in pairing/[id].tsx — reported since iter2, still not fixed.",
+  "rca_of_issue": "N/A — no functional bugs found. Only a repeat non-blocking React Native Web deprecation warning."
+}

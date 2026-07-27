@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="11" time="14.461" timestamp="2026-07-27T02:24:39.355373+00:00" hostname="agent-env-337bde14-d5a3-4a0a-b116-73a5b40626ec"><testcase classname="tests.test_pairly_new_features.TestRename" name="test_api_title_is_pairly" time="0.280"><failure message="requests.exceptions.JSONDecodeError: Expecting value: line 1 column 1 (char 0)">/root/.venv/lib/python3.11/site-packages/requests/models.py:1116: in json
+    return complexjson.loads(self.text, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/json/decoder.py:337: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/json/decoder.py:355: in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+E   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+During handling of the above exception, another exception occurred:
+backend/tests/test_pairly_new_features.py:65: in test_api_title_is_pairly
+    assert r.json()["info"]["title"] == "Pairly"
+           ^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/models.py:1120: in json
+    raise RequestsJSONDecodeError(e.msg, e.doc, e.pos)
+E   requests.exceptions.JSONDecodeError: Expecting value: line 1 column 1 (char 0)</failure></testcase><testcase classname="tests.test_pairly_new_features.TestRename" name="test_root_message" time="0.056" /><testcase classname="tests.test_pairly_new_features.TestListProjection" name="test_pairings_list_omits_image_b64" time="0.335" /><testcase classname="tests.test_pairly_new_features.TestListProjection" name="test_favorites_only_omits_image_b64" time="0.061" /><testcase classname="tests.test_pairly_new_features.TestPairingImage" name="test_image_gen_and_cache_and_projection" time="10.627" /><testcase classname="tests.test_pairly_new_features.TestPairingImage" name="test_image_invalid_id_404" time="0.054" /><testcase classname="tests.test_pairly_new_features.TestPairingImage" name="test_image_unknown_id_404" time="0.055" /><testcase classname="tests.test_pairly_new_features.TestChat" name="test_chat_unauth_401" time="0.052" /><testcase classname="tests.test_pairly_new_features.TestChat" name="test_chat_streams_and_persists" time="2.176" /><testcase classname="tests.test_pairly_new_features.TestChat" name="test_clear_chat" time="0.098" /><testcase classname="tests.test_pairly_new_features.TestQuotaRegression" name="test_chat_and_pairing_402_when_limit_reached" time="0.467" /></testsuite></testsuites>

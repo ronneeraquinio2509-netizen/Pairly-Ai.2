@@ -4,7 +4,7 @@ import { Menu, Pairing } from "@/src/api";
 
 export function pairingToText(p: Pairing): string {
   const lines: string[] = [];
-  lines.push(`🍽️ Pairly AI — ${p.headline || p.query}`);
+  lines.push(`🍽️ Pairly — ${p.headline || p.query}`);
   if (p.summary) lines.push(`\n${p.summary}`);
   lines.push("");
   p.pairings.forEach((item, i) => {
@@ -16,7 +16,7 @@ export function pairingToText(p: Pairing): string {
     lines.push(`\n👨‍🍳 ${p.mini_recipe_title}`);
     p.mini_recipe_steps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
   }
-  lines.push("\nFound with Pairly AI");
+  lines.push("\nFound with Pairly");
   return lines.join("\n");
 }
 
@@ -28,7 +28,7 @@ export function menuToText(m: Menu): string {
     if (c.notes) lines.push(`   ${c.notes}`);
   });
   if (m.wine_notes) lines.push(`\nBeverage progression: ${m.wine_notes}`);
-  lines.push("\nBuilt with Pairly AI");
+  lines.push("\nBuilt with Pairly");
   return lines.join("\n");
 }
 

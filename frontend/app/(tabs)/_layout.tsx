@@ -25,6 +25,13 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="chat"
+        options={{
+          title: "Ask",
+          tabBarIcon: ({ color }) => <Feather name="message-circle" size={20} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="saved"
         options={{
           title: "Saved",

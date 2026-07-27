@@ -43,6 +43,13 @@ free daily limit with PayPal premium unlock, chef menu-building tool.
 - Branded shareable **pairing card image** — off-screen card (`src/components/pairing-share-card.tsx`)
   captured with `react-native-view-shot` and shared via `expo-sharing` from the pairing detail screen
   (web shows an info toast; native only). Verified in `/app/test_reports/iteration_2.json`.
+- **Food photography**: AI-generated hero photo per pairing (Gemini Nano Banana
+  `gemini-3.1-flash-image-preview`, JPEG-compressed base64, cached on the doc, `POST /api/pairings/{id}/image`);
+  editorial fallback photos as thumbnails in Recent searches and Saved cards.
+- **Ask Pairly chat tab** — streaming SSE chat (Claude Sonnet 4.6, GPT-5.5 fallback) with persisted history,
+  starter prompts, clear conversation; chat messages count toward the daily AI quota.
+- Renamed the product from "Pairly AI" to **Pairly** across app.json, UI, share text and API.
+  All verified in `/app/test_reports/iteration_3.json`.
 
 ## Backlog
 - **P0** Real PayPal credentials (sandbox → live) + webhook verification for capture.

@@ -1,0 +1,27 @@
+{
+  "summary": "Frontend-only regression for the new pairing share-card feature. All required testIDs present on the pairing detail screen, share-card-button visible at bottom and tappable, tapping it on web shows the expected app-toast ('Image sharing works on the mobile app — open Pairly in Expo Go') and the button does NOT get stuck in 'Creating card…' state. Off-screen PairingShareCard is correctly positioned off-screen (x=-9983, y=-482) — no visible bleed, no scroll padding added. No red-box or console errors from react-native-view-shot, expo-sharing, or the PairingShareCard render. Regression smoke passed: login (chef@pairly.app) → open recent pairing → detail loads with headline/5 items/mini recipe/WhatsApp button/share-card button → favorite persists → Saved tab lists the item (saved-item-6a6685855a9bce39114e7999). One minor console deprecation warning surfaced: `props.pointerEvents is deprecated. Use style.pointerEvents` originating from the off-screen `<View style={styles.offscreen} pointerEvents=\"none\">` at /app/frontend/app/pairing/[id].tsx:202 — non-blocking but should be migrated to `style.pointerEvents` for consistency with the toast.tsx fix. Also observed a benign `useNativeDriver` web warning (expected on web preview).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "PairingDetail off-screen wrapper", "issue": "Uses deprecated `pointerEvents` prop instead of `style.pointerEvents`. Warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Reference: /app/frontend/app/pairing/[id].tsx:202 — change `<View style={styles.offscreen} pointerEvents=\"none\">` to include `pointerEvents: 'none'` inside the style object (same pattern used in src/components/toast.tsx)."}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_2.json"],
+  "action_items": [
+    "Migrate `pointerEvents=\"none\"` prop on the off-screen PairingShareCard wrapper (pairing/[id].tsx line 202) into the style object to silence the React Native Web deprecation warning."
+  ],
+  "critical_code_review_comments": [
+    "Off-screen render pattern (position: absolute, left: -9999, opacity: 0) works and does not add scroll space, but on real devices consider `collapsable={false}` already applied inside PairingShareCard — good. Ensure captureRef is invoked only after the card has mounted (currently guaranteed because the button lives in the same ScrollView).",
+    "shareCard() correctly early-returns on Platform.OS === 'web' before touching captureRef, so react-native-view-shot is never called on web — verified: no console error triggered on tap."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (per request)", "frontend": "100%"},
+  "seed_data_creation": "None — reused existing chef@pairly.app account and its 3 pre-existing recent pairings.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "chef@pairly.app / Pairly123! has 3 recent pairings and at least 1 favorite (id 6a6685855a9bce39114e7999) — reuse these to avoid burning LLM quota. share-card-button lives at the bottom of the pairing detail scroll; on web it must show the app-toast and NOT enter loading state.",
+  "rca_of_issue": "N/A — no functional bugs. Only a non-blocking React Native Web deprecation warning about `props.pointerEvents` from the off-screen wrapper View in pairing/[id].tsx."
+}

@@ -1,11 +1,14 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import * as Sharing from "expo-sharing";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { captureRef } from "react-native-view-shot";
 
 import { api, Pairing } from "@/src/api";
 import { useToast } from "@/src/components/toast";
+import { PairingShareCard } from "@/src/components/pairing-share-card";
 import { ErrorState, Skeleton } from "@/src/components/ui";
 import { pairingToText, shareToWhatsApp } from "@/src/share";
 import { colors, fonts, radius, spacing, type } from "@/src/theme";
@@ -19,6 +22,8 @@ export default function PairingDetail() {
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [error, setError] = useState("");
   const [openIdx, setOpenIdx] = useState<number | null>(0);
+  const [sharingCard, setSharingCard] = useState(false);
+  const cardRef = useRef<View>(null);
 
   const load = useCallback(async () => {
     setError("");
@@ -53,6 +58,31 @@ export default function PairingDetail() {
       if (via === "share") toast.show("WhatsApp not installed — used the share sheet", "info");
     } catch {
       toast.show("Sharing is unavailable on this device", "error");
+    }
+  };
+
+  const shareCard = async () => {
+    if (!pairing) return;
+    if (Platform.OS === "web") {
+      toast.show("Image sharing works on the mobile app — open Pairly in Expo Go", "info");
+      return;
+    }
+    setSharingCard(true);
+    try {
+      const uri = await captureRef(cardRef, { format: "png", quality: 1, result: "tmpfile" });
+      if (!(await Sharing.isAvailableAsync())) {
+        toast.show("Sharing is unavailable on this device", "error");
+        return;
+      }
+      await Sharing.shareAsync(uri, {
+        mimeType: "image/png",
+        dialogTitle: `${pairing.query} pairings`,
+        UTI: "public.png",
+      });
+    } catch {
+      toast.show("Could not create the pairing card", "error");
+    } finally {
+      setSharingCard(false);
     }
   };
 
@@ -156,6 +186,22 @@ export default function PairingDetail() {
             <Feather name="message-circle" size={17} color={colors.onBrand} />
             <Text style={styles.waText}>Share on WhatsApp</Text>
           </Pressable>
+
+          <Pressable
+            testID="share-card-button"
+            onPress={shareCard}
+            disabled={sharingCard}
+            style={[styles.cardBtn, sharingCard && { opacity: 0.6 }]}
+          >
+            <Feather name="image" size={17} color={colors.onSurface} />
+            <Text style={styles.cardBtnText}>
+              {sharingCard ? "Creating card…" : "Share as pairing card"}
+            </Text>
+          </Pressable>
+
+          <View style={styles.offscreen} pointerEvents="none">
+            <PairingShareCard ref={cardRef} pairing={pairing} />
+          </View>
         </ScrollView>
       )}
     </View>
@@ -279,4 +325,17 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   waText: { fontFamily: fonts.text, fontSize: type.lg, fontWeight: "600", color: colors.onBrand },
+  cardBtn: {
+    marginTop: spacing.md,
+    height: 52,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+  },
+  cardBtnText: { fontFamily: fonts.text, fontSize: type.lg, fontWeight: "600", color: colors.onSurface },
+  offscreen: { position: "absolute", left: -9999, top: 0, opacity: 0 },
 });
